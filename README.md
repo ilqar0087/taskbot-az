@@ -4,7 +4,7 @@ Telegram assistant for discovering public open-source bounty issues, listing wor
 
 ## Telegram commands
 - `/start`, `/id`
-- `/scan` — searches public GitHub issues for open bounty/reward opportunities
+- `/scan` — searches public GitHub issues for open bounty/reward opportunities; automatic background scan runs every 6 hours and sends only new matches to the owner
 - `/opportunities` — shows discovered issues
 - `/view ID` — shows details, reward hints, and AI-eligibility classification
 - `/tasks` — lists other task marketplaces
