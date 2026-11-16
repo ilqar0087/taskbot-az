@@ -119,9 +119,9 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Bu bot şəxsi idarəetmə üçündür. Sahib hesabı ilə daxil olun.")
         return
     await update.message.reply_text(
-        "🤖 AI Binance Trader — TESTNET analiz rejimi\n"
+        "🤖 AI Binance Trader — canlı bazar məlumatları ilə analiz rejimi\n"
         "/scan — indi bazarı yoxla\n/earn — Earn və bonusları yoxla\n/status — vəziyyət\n/history — son siqnallar\n/pause — skanı dayandır\n/resume — skanı davam etdir\n\n"
-        "Real ticarət və pul çıxarma funksiyası bu versiyada bağlıdır."
+        "Bazar məlumatı Binance-in açıq əsas şəbəkə API-sindən oxunur; sifariş açmaq və pul çıxarmaq funksiyası bu versiyada yoxdur."
     )
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
