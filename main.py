@@ -393,37 +393,32 @@ def fetch_remote_job_feeds():
 
 
 def fetch_mobile_platform_leads():
-    """List task platforms with device fit and evidence clearly separated."""
+    """Focus discovery on the three selected platforms; never imply a task is currently available."""
     found = []
-    # Phone-first order: unknown device requirements are not advertised as mobile-compatible.
-    priority = ("Microworker.app", "Jwuma / Corpshore", "Andovar", "Work.az",
-                "OneForma", "Welo Data")
-    leads = sorted(AZERBAIJAN_LEADS,
-                   key=lambda x: next((i for i, name in enumerate(priority)
-                                       if x["name"].startswith(name)), len(priority)))
+    priority_names = ("Microworker.app", "Jwuma / Corpshore", "Andovar")
+    leads = [lead for lead in AZERBAIJAN_LEADS
+             if lead["name"].startswith(priority_names)]
     for lead in leads:
         name = lead["name"]
-        if name.startswith("Welo Data"):
-            device = "KOMPÜTER TƏLƏB OLUNUR — mobil deyil"
-        elif name.startswith("OneForma"):
-            device = "CİHAZ TƏLƏBİ TƏSDİQLƏNMƏYİB — layihə panelində yoxla"
-        elif name.startswith(("Microworker.app", "Jwuma / Corpshore")):
+        if name.startswith("Microworker.app"):
+            device = "MOBİL TAPŞIRIQLAR MÜMKÜNDÜR — hər tapşırığın cihaz şərtini yoxla"
+            extra = " Bot platformanın işçi hesabındakı tapşırıqları API ilə oxumur; hesab panelində yoxlanmalıdır."
+        elif name.startswith("Jwuma / Corpshore"):
             device = "MOBİL UYĞUNLUQ TƏSDİQLƏNMƏLİDİR"
+            extra = " Azərbaycan üçün qeydiyyat var; konkret layihə və telefon tələbi hesabda təsdiqlənməlidir."
         else:
-            device = "CİHAZ TƏLƏBİ ELANDA YOXLANSIN"
-        is_live_oneforma = name.startswith("OneForma")
+            device = "MOBİL SƏS/TƏRCÜMƏ LAYİHƏSİ OLA BİLƏR — aktiv AZ layihəsi təsdiqlənməlidir"
+            extra = " Ümumi freelancer qeydiyyatı aktiv layihə demək deyil."
         found.append({
-            "source": "Açıq layihə" if is_live_oneforma else "Platforma",
+            "source": "Prioritet mobil platforma",
             "title": name,
             "url": lead["url"],
-            "reward": "Təsdiqlənmiş material başına; məbləğ layihə panelində" if is_live_oneforma
-                      else "Ödəniş və aktiv tapşırıq hesabda yoxlanmalıdır",
-            "eligibility": device + " | Azərbaycan uyğunluğu və payout ayrıca təsdiqlənməlidir",
-            "summary": lead["status"] + " " + lead["details"],
+            "reward": "Yalnız təsdiqlənmiş işə görə; məbləğ və payout hesabda yoxlanmalıdır",
+            "eligibility": device + " | Azərbaycan və payout ayrıca təsdiqlənməlidir",
+            "summary": lead["status"] + " " + lead["details"] + extra,
             "updated": datetime.now(timezone.utc).isoformat(),
         })
     return found
-
 
 def fetch_all_opportunities():
     # Prioritize explicit Azerbaijan task projects/platforms, then live remote vacancies and cash bounties.
@@ -503,7 +498,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Task Worker AZ\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
-        "/scan — iş elanları və mobil tapşırıq platformalarını axtar\n"
+        "/scan — prioritet 3 mobil platformanı və əlavə elanları axtar\n"
+        "/mobile — yalnız 3 prioritet mobil platforma\n"
         "/tasks — tapşırıq mənbələri\n"
         "/opportunities — tapılmış elanlar\n"
         "/view ID — elan təfərrüatı\n"
@@ -595,7 +591,7 @@ async def faucet(update, context):
 async def scan(update, context):
     if not await private_only(update):
         return
-    await update.message.reply_text("Açıq bounty elanları axtarılır...")
+    await update.message.reply_text("Prioritet platformalar yoxlanır: Microworker.app, Jwuma/Corpshore və Andovar. Sonra əlavə uzaqdan işlər və təsdiqli bounty-lər axtarılır...")
     try:
         items = await asyncio.to_thread(fetch_all_opportunities)
         await asyncio.to_thread(save_opportunities, items)
