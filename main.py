@@ -54,10 +54,10 @@ AZERBAIJAN_LEADS = [
         "details": "Mətn annotasiyası, tərcümə yoxlaması, QA və səs/məlumat toplama. Ödəniş həftəlik batch kimi göstərilir; Azərbaycan üçün USD bank köçürməsi, 2% komissiya (minimum $10, maksimum $30). USD hesab tələb oluna bilər. Telefon uyğunluğu və real tapşırıq mövcudluğu qeydiyyatdan əvvəl təsdiqlənməlidir."
     },
     {
-        "name": "OneForma — Azeri Translation Quality Rater (kompüter tələb edir)",
+        "name": "OneForma — Azeri Translation Quality Rater (açıq layihə)",
         "url": "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/",
-        "status": "Axtarış zamanı Azerbaijan üçün açıq və müraciət qəbul edən layihə kimi göstərilirdi; status dəyişə bilər.",
-        "details": "Azeri (Latin) ↔ English tərcümə keyfiyyətinin yoxlanması; ödəniş təsdiqlənmiş material başınadır, gündə təxminən 2 saat. Layihə kompüter və sabit internet tələb edir, yalnız telefonla işləmək üçün uyğun deyil."
+        "status": "Rəsmi OneForma layihələr siyahısında Azerbaijan üçün açıq göstərilir; vəziyyət müraciət panelində yenidən təsdiqlənməlidir.",
+        "details": "Azeri (Latin) tərcümələrinin keyfiyyətini qiymətləndirmə; ödəniş təsdiqlənmiş material başınadır, təxminən gündə 2 saat. Məbləğ layihə səhifəsində göstərilmir. Telefon/kompüter tələbi müraciət panelində dəqiqləşdirilməlidir."
     },
     {
         "name": "Andovar — dil və səs yazısı layihələri",
@@ -393,17 +393,32 @@ def fetch_remote_job_feeds():
 
 
 def fetch_mobile_platform_leads():
-    """List all Azerbaijan-relevant task platforms separately from verified vacancies.
-    These are platform entry points, not claims that a paid task is currently open.
-    """
+    """List task platforms with device fit and evidence clearly separated."""
     found = []
-    for lead in AZERBAIJAN_LEADS:
+    # Phone-first order: unknown device requirements are not advertised as mobile-compatible.
+    priority = ("Microworker.app", "Jwuma / Corpshore", "Andovar", "Work.az",
+                "OneForma", "Welo Data")
+    leads = sorted(AZERBAIJAN_LEADS,
+                   key=lambda x: next((i for i, name in enumerate(priority)
+                                       if x["name"].startswith(name)), len(priority)))
+    for lead in leads:
+        name = lead["name"]
+        if name.startswith("Welo Data"):
+            device = "KOMPÜTER TƏLƏB OLUNUR — mobil deyil"
+        elif name.startswith("OneForma"):
+            device = "CİHAZ TƏLƏBİ TƏSDİQLƏNMƏYİB — layihə panelində yoxla"
+        elif name.startswith(("Microworker.app", "Jwuma / Corpshore")):
+            device = "MOBİL UYĞUNLUQ TƏSDİQLƏNMƏLİDİR"
+        else:
+            device = "CİHAZ TƏLƏBİ ELANDA YOXLANSIN"
+        is_live_oneforma = name.startswith("OneForma")
         found.append({
-            "source": "Platforma",
-            "title": lead["name"],
+            "source": "Açıq layihə" if is_live_oneforma else "Platforma",
+            "title": name,
             "url": lead["url"],
-            "reward": "Ödəniş və aktiv tapşırıq hesabda yoxlanmalıdır",
-            "eligibility": "PLATFORM_LEAD — qeydiyyat, cihaz, aktiv tapşırıq və payout ayrıca təsdiqlənməlidir",
+            "reward": "Təsdiqlənmiş material başına; məbləğ layihə panelində" if is_live_oneforma
+                      else "Ödəniş və aktiv tapşırıq hesabda yoxlanmalıdır",
+            "eligibility": device + " | Azərbaycan uyğunluğu və payout ayrıca təsdiqlənməlidir",
             "summary": lead["status"] + " " + lead["details"],
             "updated": datetime.now(timezone.utc).isoformat(),
         })
@@ -411,8 +426,8 @@ def fetch_mobile_platform_leads():
 
 
 def fetch_all_opportunities():
-    # Platform links are useful even when public job feeds contain no matching mobile roles.
-    return fetch_mobile_platform_leads() + fetch_github_bounties() + fetch_remote_job_feeds()
+    # Prioritize explicit Azerbaijan task projects/platforms, then live remote vacancies and cash bounties.
+    return fetch_mobile_platform_leads() + fetch_remote_job_feeds() + fetch_github_bounties()
 
 
 def save_opportunities(items):
