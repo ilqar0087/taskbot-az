@@ -52,7 +52,7 @@ NO_CASH_PHRASES = (
     "paid in tokens", "token reward only", "no monetary reward", "no payment",
     "unpaid", "volunteer", "for recognition only"
 )
-MONEY_RE = re.compile(r"\$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD|ETH|SOL)", re.I)
+MONEY_RE = re.compile(r"$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD|ETH|SOL)", re.I)
 SOURCE_URL_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\d+", re.I)
 
 def extract_source_url(body, fallback):
@@ -227,7 +227,7 @@ def fetch_remote_job_feeds():
                 continue
             location = job.get("location") or "Remote — dəqiqləşdir"
             low, high = job.get("salary_min"), job.get("salary_max")
-            salary = f"Maaş: \${low}–\${high}" if low or high else "Maaş: elanda göstərilməyib"
+            salary = f"Maaş: ${low}–${high}" if low or high else "Maaş: elanda göstərilməyib"
             tags = ", ".join(job.get("tags") or [])
             summary = (job.get("description") or "") + (f" | Etiketlər: {tags}" if tags else "")
             found.append({
