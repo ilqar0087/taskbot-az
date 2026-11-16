@@ -1,6 +1,6 @@
 # AI Binance Trader (safe first build)
 
-Telegram-controlled Binance market scanner. The initial release is **TESTNET-only** and defaults to analysis/alerts, not order placement.
+Telegram-controlled Binance market scanner. It reads public Binance mainnet market data for analysis and alerts; it does not authenticate for trading or place orders.
 
 ## Included
 - Spot and USDT-M Futures market scans
@@ -21,7 +21,7 @@ Telegram-controlled Binance market scanner. The initial release is **TESTNET-onl
 - `TRADING_MODE` must remain `testnet`; the application refuses any other mode.
 - `AUTO_TRADE_TESTNET=false` by default. No orders are placed in this initial build.
 - Risk sizing is not approved until a verified account equity is configured; no fictional balance is assumed.
-- Spot and Futures signals are analytical alerts. This release does not yet place live or testnet orders.
+- Spot and Futures signals are analytical alerts from public mainnet data. This release does not place live or testnet orders.
 - It does not promise profits or loss-free trading.
 - Earn uses Binance production read-only Simple Earn API endpoints for product information; this is separate from Testnet trading. Configure a dedicated API key with read-only permission only. Never enable trading or withdrawals. Product listings do not guarantee your account or region is eligible.
 - No Earn subscription, redemption, transfer, order, or withdrawal is executed. You must review and act yourself.
