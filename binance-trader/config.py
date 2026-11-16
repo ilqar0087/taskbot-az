@@ -15,6 +15,8 @@ class Settings:
     auto_trade_testnet: bool = _bool("AUTO_TRADE_TESTNET", False)
     api_key: str = os.getenv("BINANCE_API_KEY", "")
     api_secret: str = os.getenv("BINANCE_API_SECRET", "")
+    earn_api_key: str = os.getenv("BINANCE_EARN_API_KEY", "")
+    earn_api_secret: str = os.getenv("BINANCE_EARN_API_SECRET", "")
     scan_interval: int = max(60, int(os.getenv("SCAN_INTERVAL_SECONDS", "300")))
     symbols: tuple = tuple(s.strip() for s in os.getenv(
         "SYMBOLS", "BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT"
