@@ -316,11 +316,13 @@ def fetch_all_opportunities():
 def save_opportunities(items):
     new_items = []
     with connect() as db:
-        db.execute("UPDATE opportunities SET active=0")
+        if items:
+            db.execute("UPDATE opportunities SET active=0")
         known = {row[0] for row in db.execute("SELECT url FROM opportunities")}
         for item in items:
             if item["url"] not in known:
                 new_items.append(item)
+                known.add(item["url"])
             db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated,active)
               VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(url) DO UPDATE SET
               title=excluded.title,reward=excluded.reward,eligibility=excluded.eligibility,
