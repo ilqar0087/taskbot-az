@@ -393,20 +393,17 @@ def fetch_remote_job_feeds():
 
 
 def fetch_mobile_platform_leads():
-    """Show real platform entry points separately from verified job vacancies."""
-    selected = (
-        "Microworker.app — USDT/USDC BEP20 mikrotapşırıqları",
-    )
+    """List all Azerbaijan-relevant task platforms separately from verified vacancies.
+    These are platform entry points, not claims that a paid task is currently open.
+    """
     found = []
     for lead in AZERBAIJAN_LEADS:
-        if lead["name"] not in selected:
-            continue
         found.append({
             "source": "Platforma",
             "title": lead["name"],
             "url": lead["url"],
-            "reward": "Hesabda və aktiv tapşırıqda yoxlanmalıdır",
-            "eligibility": "PLATFORM_LEAD — Azərbaycan üzrə qəbul, aktiv tapşırıq və payout təsdiqlənməlidir",
+            "reward": "Ödəniş və aktiv tapşırıq hesabda yoxlanmalıdır",
+            "eligibility": "PLATFORM_LEAD — qeydiyyat, cihaz, aktiv tapşırıq və payout ayrıca təsdiqlənməlidir",
             "summary": lead["status"] + " " + lead["details"],
             "updated": datetime.now(timezone.utc).isoformat(),
         })
@@ -588,10 +585,11 @@ async def scan(update, context):
         items = await asyncio.to_thread(fetch_all_opportunities)
         await asyncio.to_thread(save_opportunities, items)
         await update.message.reply_text(
-            f"Yoxlama bitdi: {len(items)} imkan tapıldı (mobil platformalar ayrıca göstərilir). "
-            "Vakansiyalar ölkə, təcrübə və cihaz tələblərinə görə süzülür. "
-            "Platforma linkləri iş zəmanəti deyil; aktiv tapşırıq və payout hesabda yoxlanmalıdır. "
-            "Bounty üçün açıq AI icazəsi və escrow təsdiqi tələb olunur. /opportunities yaz.")
+            f"Yoxlama bitdi: {len(items)} imkan tapıldı. "
+            f"Buraya {sum(1 for x in items if x['source'] == 'Platforma')} Azərbaycan platforması və "
+            f"{sum(1 for x in items if x['source'] != 'Platforma')} uyğun elan daxildir. "
+            "Platforma siyahısı aktiv iş zəmanəti deyil; real tapşırıq və payout hesabda yoxlanmalıdır. "
+            "Bounty yalnız açıq AI icazəsi və escrow təsdiqi ilə göstərilir. /opportunities yaz.")
     except Exception as exc:
         log.exception("Task scan failed")
         await update.message.reply_text(f"Axtarış zamanı xəta: {str(exc)[:250]}")
