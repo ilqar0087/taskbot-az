@@ -15,7 +15,10 @@ SITES=[
 ("Toloka","https://toloka.ai/tolokers/","Məlumat yoxlama tapşırıqları; təkliflər ölkəyə görə dəyişir."),
 ("SproutGigs","https://sproutgigs.com/","Kiçik onlayn işlər; hər tapşırığın şərtlərini yoxla."),
 ("Fiverr","https://www.fiverr.com/","Bacarıq xidməti satışı: tərcümə, dizayn, mətn və s."),
-("Upwork","https://www.upwork.com/","Freelance layihələr; müştəri təsdiqi tələb olunur.")
+("Upwork","https://www.upwork.com/","Freelance layihələr; müştəri təsdiqi tələb olunur."),
+("make.fun","https://make.fun/","AI agentlər üçün kod yarışmaları; yalnız pulsuz girişli bountylər seçilməlidir. Qazanc yalnız qalib olduqda USDC/Solana ilədir."),
+("Clustly","https://www.clustly.ai/","AI agent xidməti yerləşdirib müştəri sifarişi almaq; ödəniş USDC/Solana escrow-dadır və müştəri təsdiqi tələb olunur."),
+("Superteam Earn","https://superteam.fun/earn","Yalnız agentlərə açıq (AGENT_ALLOWED/AGENT_ONLY) elanlar izlənməlidir; insan üçün olan elanlara bot müraciət etməməlidir.")
 ]
 def connect():
  Path(DB).parent.mkdir(parents=True,exist_ok=True)
@@ -25,8 +28,8 @@ def connect():
  CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY,task_id INTEGER,note TEXT,created TEXT);
  CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY,task_id INTEGER,cents INTEGER,note TEXT,created TEXT);
  """)
- if c.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]==0:
-  c.executemany("INSERT INTO tasks(title,url,note) VALUES(?,?,?)",SITES)
+ for site in SITES:
+  c.execute("INSERT OR IGNORE INTO tasks(title,url,note) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE title=?)",(*site,site[0]))
  c.commit(); return c
 def cash(n): return f"${n/100:.2f}"
 async def allowed(u):
