@@ -1,0 +1,17 @@
+name: AI Binance Trader CI
+on:
+  push:
+    branches: [ai-binance-trader]
+    paths:
+      - "binance-trader/**"
+      - ".github/workflows/binance-trader-ci.yml"
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r binance-trader/requirements.txt
+      - run: python -m compileall -q binance-trader
