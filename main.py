@@ -778,7 +778,7 @@ async def paid(update, context):
             return
         db.execute("INSERT INTO income(task_id,cents,note,created) VALUES(?,?,?,?)",
             (task_id, cents, " ".join(context.args[2:]), datetime.now(timezone.utc).isoformat()))
-    await update.message.reply_text("Faktiki alınmış ödəniş qeydə alındı: $" + f"{cents/100:.2f}")
+    await update.message.reply_text("İstifadəçinin daxil etdiyi ödəniş qeydə alındı: $" + f"{cents/100:.2f}" + "\\nQeyd: bot bu məbləği platforma və ya blokçeyn vasitəsilə müstəqil təsdiqləməyib.")
 
 
 async def balance(update, context):
@@ -787,7 +787,7 @@ async def balance(update, context):
     with connect() as db:
         total = db.execute("SELECT COALESCE(SUM(cents),0) FROM income").fetchone()[0]
         count = db.execute("SELECT COUNT(*) FROM income").fetchone()[0]
-    await update.message.reply_text("Qeydə alınmış faktiki gəlir: $" + f"{total/100:.2f}" + f"\nÖdəniş sayı: {count}")
+    await update.message.reply_text("İstifadəçi tərəfindən daxil edilmiş ödəniş qeydləri: $" + f"{total/100:.2f}" + f"\nÖdəniş sayı: {count}")
 
 
 async def history(update, context):
