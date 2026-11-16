@@ -21,7 +21,7 @@ def get_snapshot(exchange, symbol: str) -> dict:
     if symbol not in markets:
         raise ValueError(f"{symbol} is not available on this Binance market.")
     candles = {}
-    for timeframe in ("15m", "1h", "4h"):
+    for timeframe in ("15m", "1h", "4h", "1d", "1w"):
         candles[timeframe] = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=120)
     book = exchange.fetch_order_book(symbol, limit=20)
     ticker = exchange.fetch_ticker(symbol)
