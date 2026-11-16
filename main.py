@@ -29,6 +29,8 @@ SITES = [
     ("CrowdGen by Appen", "https://crowdgen.com/", "AI data layihələri. Layihənin Azərbaycana açıq olmasını və ödəniş metodunu hər elanda yoxla."),
     ("Jwuma / Corpshore", "https://platform.corpshore.ai/azerbaijan", "Azərbaycan üçün AI data, mətn, tərcümə və səs tapşırıqları. USD bank hesabına köçürmə göstərilir; telefonda işləmə və konkret layihə mövcudluğunu əvvəlcədən təsdiqlə."),
     ("Crowtado", "https://www.crowtado.com/en", "Telefonla foto, video və səs tapşırıqları. Azərbaycan üzrə tapşırıq və çıxarış metodunu hesabda yoxla; gəlir zəmanətli deyil."),
+    ("Wake", "https://wake.inc/contribute/", "Android/iOS ilə fiziki işlərin videosunu çəkib AI təliminə töhfə ver. Azərbaycan ödəniş ölkələri siyahısındadır; tapşırıq mövcudluğu tətbiqdə görünür. Rəsmi başlanğıc tarif $6/təsdiqlənmiş saatdır."),
+    ("OneForma — Azeri Translation Quality Rater", "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/", "Azərbaycan üçün açıq dil layihəsi; kompüter və gündə 2 saat tələb olunur, telefonla işləmək uyğun deyil."),
     ("KLKT / CNTXT AI", "https://play.google.com/store/apps/details?id=com.cntxt.cntxtai.data.services", "Android tətbiqində foto, video və audio data tapşırıqları. Azərbaycan üçün payout metodunu və aktiv tapşırıqları tətbiqdə təsdiqlə."),
     ("Andovar", "https://careers.andovar.com/freelance-and-work-from-home-opportunities/", "Dil və səs yazısı layihələri. Konkret Azərbaycan layihəsinin açıq olub-olmadığını yoxla; əvvəlki səs yazısı elanı aktiv olmaya bilər."),
     ("Work.az", "https://work.az/", "Azərbaycan üzrə yerli işlər. Müştəri ilə qiyməti, son tarixi və ödənişi yazılı razılaşdır."),
@@ -47,6 +49,18 @@ AZERBAIJAN_LEADS = [
         "url": "https://platform.corpshore.ai/azerbaijan",
         "status": "Azərbaycan ayrıca dəstəklənən ölkə kimi göstərilir; bu, avtomatik iş zəmanəti deyil.",
         "details": "Mətn annotasiyası, tərcümə yoxlaması, QA və səs/məlumat toplama. Ödəniş həftəlik batch kimi göstərilir; Azərbaycan üçün USD bank köçürməsi, 2% komissiya (minimum $10, maksimum $30). USD hesab tələb oluna bilər. Telefon uyğunluğu və real tapşırıq mövcudluğu qeydiyyatdan əvvəl təsdiqlənməlidir."
+    },
+    {
+        "name": "Wake — telefonla video çəkilişi (Android/iOS)",
+        "url": "https://wake.inc/contribute/",
+        "status": "Azərbaycan rəsmi ödəniş ölkələri siyahısındadır. Tətbiqdə görünən tapşırıqlar ölkə və çəkiliş şərtlərinə görə dəyişir.",
+        "details": "Əllər sərbəst çəkilişlə yemək hazırlamaq, yığmaq, təmir etmək və gündəlik fiziki işləri videoya çəkmək. Rəsmi sayt başlanğıc tarifi $6/təsdiqlənmiş saat göstərir; bu, zəmanətli qazanc və ya daimi tapşırıq demək deyil. Tətbiqdə Azərbaycan üçün açıq tapşırığı və ödəniş şərtlərini yoxla."
+    },
+    {
+        "name": "OneForma — Azeri Translation Quality Rater (kompüter tələb edir)",
+        "url": "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/",
+        "status": "Axtarış zamanı Azerbaijan üçün açıq və müraciət qəbul edən layihə kimi göstərilirdi; status dəyişə bilər.",
+        "details": "Azeri (Latin) ↔ English tərcümə keyfiyyətinin yoxlanması; ödəniş təsdiqlənmiş material başınadır, gündə təxminən 2 saat. Layihə kompüter və sabit internet tələb edir, yalnız telefonla işləmək üçün uyğun deyil."
     },
     {
         "name": "Crowtado — telefonla foto, video və audio tapşırıqları",
@@ -455,7 +469,7 @@ async def azjobs(update, context):
     lines = ["🇦🇿 Azərbaycan üçün iş platformaları — telefon uyğunluğu və ödəniş statusu ayrıca göstərilir:"]
     for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
         lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nTələblər: {lead['details']}\n{lead['url']}")
-    lines.append("\nUSD ödəniş üçün Kapital Bank-da ayrıca USD hesabı lazım ola bilər. Jwuma USD bank köçürməsi göstərir; digər platformalarda payout ölkə və hesab üzrə təsdiqlənməlidir. Heç bir sayta iş almaq üçün depozit ödəmə.")
+    lines.append("\nƏvvəl Wake və Crowtado-da telefonla açıq tapşırıqları yoxla. Wake Azərbaycanı ödəniş ölkəsi kimi göstərir, amma tapşırıq sayı zəmanətli deyil. OneForma layihəsi kompüter tələb edir. Jwuma-da USD köçürmə şərtlərini, digər platformalarda payout metodunu hesabda təsdiqlə. Heç bir sayta iş almaq üçün depozit ödəmə.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 async def faucet(update, context):
