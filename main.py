@@ -102,6 +102,20 @@ GITHUB_QUERIES = [
 HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
 AGENT_PERMISSION = ("ai agents are welcome", "ai agents may", "agents are explicitly allowed", "autonomous agents are allowed", "agent submissions are allowed", "bot submissions are allowed", "automation is explicitly allowed")
 JUNK_PHRASES = ("banana pudding", "bananarmonics", "stereogustatory", "recursive ontological singularity", "five-fold esoteric", "opire singularity council")
+GLOBAL_LOCATION_TERMS = ("worldwide", "anywhere", "global", "azerbaijan", "work from anywhere", "remote worldwide")
+MOBILE_TASK_TERMS = (
+    "data annotation", "data labeling", "transcription", "voice recording", "audio recording",
+    "photo task", "photo collection", "video task", "video recording", "content moderation",
+    "social media", "survey", "user testing", "app testing", "translation", "microtask",
+    "ai training", "image labeling", "speech data", "language data", "ugc"
+)
+BEGINNER_TERMS = (
+    "entry level", "entry-level", "junior", "no experience", "without experience",
+    "beginner", "training provided", "no degree", "freelance", "contributor",
+    "microtask", "task-based", "part-time"
+)
+SENIOR_TERMS = ("senior", "lead ", "manager", "director", "vp ", "vice president", "head of ", "principal", "staff engineer", "5+ years", "7+ years", "10+ years")
+
 NO_CASH_PHRASES = (
     "no cash allocated", "does not currently have cash", "no cash reward",
     "not a cash bounty", "cash is not guaranteed", "cash not guaranteed",
@@ -146,6 +160,30 @@ def classify_eligibility(text):
     if any(phrase in lowered for phrase in AGENT_PERMISSION):
         return "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla"
     return "REVIEW_REQUIRED — AI agent icazəsi açıq təsdiqlənməyib"
+
+def has_explicit_escrow(text):
+    lowered = (text or "").lower()
+    return any(term in lowered for term in (
+        "escrow funded", "escrow is active", "funds are escrowed",
+        "payment held in escrow", "escrow deposit confirmed",
+        "funded escrow", "escrow balance confirmed"
+    ))
+
+
+def qualifies_remote_job(title, location, description):
+    """Keep only clearly worldwide/Azerbaijan-eligible, beginner and phone-friendly work."""
+    loc = (location or "").lower()
+    text = ((title or "") + " " + (description or "")).lower()
+    if not any(term in loc for term in GLOBAL_LOCATION_TERMS):
+        return False, "Ölkə uyğunluğu təsdiqlənməyib"
+    if any(term in text for term in SENIOR_TERMS):
+        return False, "Senior/təcrübəli vəzifədir"
+    if not any(term in text for term in MOBILE_TASK_TERMS):
+        return False, "Telefonla görülən tapşırıq olduğu təsdiqlənməyib"
+    if not any(term in text for term in BEGINNER_TERMS):
+        return False, "Başlanğıc səviyyə/təcrübəsiz qəbul təsdiqlənməyib"
+    return True, "AZ uyğunluğu açıq göstərilib; başlanğıc və mobil tapşırıq — müraciət şərtlərini yoxla"
+
 
 def has_mirror_warning(text):
     lowered = (text or "").lower()
@@ -196,6 +234,10 @@ def verify_github_issue(url):
             return False, "Avtomatik CI güzgüsüdür; normal PR-lar qəbul edilmir"
         if any(term in content.lower() for term in NO_CASH_PHRASES):
             return False, "Nağd ödəniş təsdiqlənməyib"
+        if classify_eligibility(content) != "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla":
+            return False, "AI agentə açıq icazə yoxdur"
+        if not has_explicit_escrow(content):
+            return False, "Escrow maliyyələşməsi açıq təsdiqlənməyib"
         if has_competing_pull_request(owner, repo, number):
             return False, "Artıq açıq və ya birləşdirilmiş həll PR-ı mövcuddur"
         return True, content
@@ -315,12 +357,15 @@ def fetch_remote_job_feeds():
             currency = job.get("salaryCurrency") or "USD"
             salary = f"Maaş: {salary_min or '?'}–{salary_max or '?'} {currency}" if salary_min or salary_max else "Maaş: elanda göstərilməyib"
             excerpt = job.get("jobExcerpt") or job.get("jobDescription") or ""
+            qualifies, reason = qualifies_remote_job(title, location, excerpt)
+            if not qualifies:
+                continue
             found.append({
                 "source": "Jobicy",
                 "title": f"{title} — {job.get('companyName') or 'Şirkət göstərilməyib'} [{location}]",
                 "url": url,
                 "reward": salary,
-                "eligibility": "REMOTE_JOB — ölkə uyğunluğu və müraciət şərtlərini yoxla",
+                "eligibility": "AZ + MOBİL + BAŞLANĞIC — " + reason,
                 "summary": "[Mənbə: Jobicy] " + re.sub(r"\s+", " ", excerpt).strip()[:450],
                 "updated": job.get("pubDate") or datetime.now(timezone.utc).isoformat(),
             })
@@ -343,12 +388,15 @@ def fetch_remote_job_feeds():
             salary = f"Maaş: ${low}–${high}" if low or high else "Maaş: elanda göstərilməyib"
             tags = ", ".join(job.get("tags") or [])
             summary = (job.get("description") or "") + (f" | Etiketlər: {tags}" if tags else "")
+            qualifies, reason = qualifies_remote_job(job["position"], location, summary + " " + tags)
+            if not qualifies:
+                continue
             found.append({
                 "source": "Remote OK",
                 "title": f"{job['position']} — {job.get('company') or 'Şirkət göstərilməyib'} [{location}]",
                 "url": url,
                 "reward": salary,
-                "eligibility": "REMOTE_JOB — ölkə uyğunluğu və müraciət şərtlərini yoxla",
+                "eligibility": "AZ + MOBİL + BAŞLANĞIC — " + reason,
                 "summary": "[Mənbə: Remote OK] " + re.sub(r"<[^>]+>", " ", re.sub(r"\s+", " ", summary)).strip()[:450],
                 "updated": job.get("date") or datetime.now(timezone.utc).isoformat(),
             })
@@ -443,7 +491,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
         "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
         "/balance — real gəlir\n/history — tarixçə\n/faucet — FaucetPay məlumatı\n/id — Telegram ID\n\n"
-        "DEMO: sınaq və elan baxışı. REAL: bounty və uzaqdan iş elanları; müraciət və iş icrası üçün insan təsdiqi tələb olunur.",
+        "DEMO: sınaq və elan baxışı. REAL: Azərbaycan/Worldwide uyğun, mobil və başlanğıc səviyyəli işlər. Bounty yalnız açıq AI icazəsi və escrow təsdiqi ilə göstərilir. Müraciət və iş icrası üçün insan təsdiqi tələb olunur.",
         reply_markup=mode_keyboard(mode)
     )
 
@@ -532,7 +580,10 @@ async def scan(update, context):
     try:
         items = await asyncio.to_thread(fetch_all_opportunities)
         await asyncio.to_thread(save_opportunities, items)
-        await update.message.reply_text(f"Yoxlama bitdi: {len(items)} elan tapıldı. /opportunities yaz.")
+        await update.message.reply_text(
+            f"Yoxlama bitdi: {len(items)} uyğun elan tapıldı. "
+            "Filtr: Azərbaycan/Worldwide + başlanğıc səviyyə + telefonla görülən tapşırıq. "
+            "Bounty üçün açıq AI icazəsi və escrow təsdiqi tələb olunur. /opportunities yaz.")
     except Exception as exc:
         log.exception("Task scan failed")
         await update.message.reply_text(f"Axtarış zamanı xəta: {str(exc)[:250]}")
@@ -546,7 +597,7 @@ async def opportunities(update, context):
     if not rows:
         await update.message.reply_text("Hələ elan tapılmayıb. Əvvəl /scan yaz.")
         return
-    lines = ["Tapılmış açıq elanlar:"]
+    lines = ["Sənin filtrlərinə uyğun açıq elanlar (AZ/Worldwide • mobil • başlanğıc):"]
     for row in rows:
         lines.append(f"\nID {row['id']}: {row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n{row['url']}")
     lines.append("\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
