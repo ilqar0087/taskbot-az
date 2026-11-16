@@ -73,7 +73,12 @@ NO_CASH_PHRASES = (
     "paid in tokens", "token reward only", "no monetary reward", "no payment",
     "unpaid", "volunteer", "for recognition only"
 )
-MONEY_RE = re.compile(r"$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD|ETH|SOL)", re.I)
+MIRROR_WARNING_PHRASES = (
+    "automated ci conformance mirror", "automated ci regression mirror",
+    "manual pull requests from human engineers are not reviewed",
+    "external edge conformance mirror", "specification shards"
+)
+MONEY_RE = re.compile(r"\$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD)\b", re.I)
 SOURCE_URL_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\d+", re.I)
 
 def extract_source_url(body, fallback):
@@ -106,6 +111,36 @@ def classify_eligibility(text):
         return "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla"
     return "REVIEW_REQUIRED — AI agent icazəsi açıq təsdiqlənməyib"
 
+def has_mirror_warning(text):
+    lowered = (text or "").lower()
+    return any(phrase in lowered for phrase in MIRROR_WARNING_PHRASES)
+
+
+def has_competing_pull_request(owner, repo, issue_number):
+    """Skip issues that already have an open or merged solution PR."""
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.2"}
+    comments_url = "https://api.github.com/repos/%s/%s/issues/%s/comments?per_page=100" % (owner, repo, issue_number)
+    try:
+        req = urllib.request.Request(comments_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            comments = json.loads(response.read().decode("utf-8"))
+        pattern = re.compile(r"https?://github\\.com/%s/%s/pull/(\\d+)" % (re.escape(owner), re.escape(repo)), re.I)
+        pr_numbers = set()
+        for comment in comments:
+            pr_numbers.update(pattern.findall(comment.get("body") or ""))
+        for number in pr_numbers:
+            pr_url = "https://api.github.com/repos/%s/%s/pulls/%s" % (owner, repo, number)
+            req = urllib.request.Request(pr_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                pr = json.loads(response.read().decode("utf-8"))
+            if pr.get("state") == "open" or pr.get("merged") is True:
+                return True
+        return False
+    except Exception as exc:
+        log.info("Optional PR check skipped for %s/%s#%s: %s", owner, repo, issue_number, type(exc).__name__)
+        return False
+
+
 def verify_github_issue(url):
     match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)", url or "")
     if not match:
@@ -121,8 +156,12 @@ def verify_github_issue(url):
         if issue.get("assignees"):
             return False, "Orijinal elan artıq icraçıya təyin edilib"
         content = (issue.get("title") or "") + "\n" + (issue.get("body") or "")
+        if has_mirror_warning(content):
+            return False, "Avtomatik CI güzgüsüdür; normal PR-lar qəbul edilmir"
         if any(term in content.lower() for term in NO_CASH_PHRASES):
-            return False, "Elan nağd pul ödənişi deyil və ya ödəniş təmin edilməyib"
+            return False, "Nağd ödəniş təsdiqlənməyib"
+        if has_competing_pull_request(owner, repo, number):
+            return False, "Artıq açıq və ya birləşdirilmiş həll PR-ı mövcuddur"
         return True, content
     except Exception as exc:
         return False, "Orijinal elan yoxlanmadı (%s)" % type(exc).__name__
@@ -143,12 +182,15 @@ def connect():
     db.executescript("""
     CREATE TABLE IF NOT EXISTS opportunities(
       id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, title TEXT, url TEXT UNIQUE,
-      reward TEXT, eligibility TEXT, summary TEXT, updated TEXT
+      reward TEXT, eligibility TEXT, summary TEXT, updated TEXT, active INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY, task_id INTEGER, note TEXT, created TEXT);
     CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY, task_id INTEGER, cents INTEGER, note TEXT, created TEXT);
     CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
     """)
+    columns = {row[1] for row in db.execute("PRAGMA table_info(opportunities)")}
+    if "active" not in columns:
+        db.execute("ALTER TABLE opportunities ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     return db
 
 
@@ -168,7 +210,7 @@ def fetch_github_bounties():
                     continue
                 combined = title + "\n" + body
                 lowered = combined.lower()
-                if any(phrase in lowered for phrase in JUNK_PHRASES):
+                if any(phrase in lowered for phrase in JUNK_PHRASES) or has_mirror_warning(combined):
                     continue
                 source_url = extract_source_url(body, item["html_url"])
                 # Only show canonical, verified, open, unassigned cash bounty issues.
@@ -274,14 +316,15 @@ def fetch_all_opportunities():
 def save_opportunities(items):
     new_items = []
     with connect() as db:
+        db.execute("UPDATE opportunities SET active=0")
         known = {row[0] for row in db.execute("SELECT url FROM opportunities")}
         for item in items:
             if item["url"] not in known:
                 new_items.append(item)
-            db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated)
-              VALUES(?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET
+            db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated,active)
+              VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(url) DO UPDATE SET
               title=excluded.title,reward=excluded.reward,eligibility=excluded.eligibility,
-              summary=excluded.summary,updated=excluded.updated""",
+              summary=excluded.summary,updated=excluded.updated,active=1""",
               (item["source"], item["title"], item["url"], item["reward"],
                item["eligibility"], item["summary"], item["updated"]))
     return new_items
@@ -422,7 +465,7 @@ async def opportunities(update, context):
     if not await private_only(update):
         return
     with connect() as db:
-        rows = db.execute("SELECT id,title,reward,eligibility,url FROM opportunities ORDER BY updated DESC LIMIT 15").fetchall()
+        rows = db.execute("SELECT id,title,reward,eligibility,url FROM opportunities WHERE active=1 ORDER BY updated DESC LIMIT 15").fetchall()
     if not rows:
         await update.message.reply_text("Hələ elan tapılmayıb. Əvvəl /scan yaz.")
         return
