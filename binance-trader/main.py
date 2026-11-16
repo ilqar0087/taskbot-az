@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("ai-binance-trader")
 settings = Settings()
 PAUSED = False
-LAST_SCAN = "Hələ skan edilməyib"\nLAST_EARN_SCAN = None
+LAST_SCAN = "Hələ skan edilməyib"
+LAST_EARN_SCAN = None
 
 def owner_only(update: Update) -> bool:
     return bool(settings.owner_id) and str(update.effective_user.id) == settings.owner_id
@@ -119,7 +120,7 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.message.reply_text(
         "🤖 AI Binance Trader — TESTNET analiz rejimi\n"
-        "/scan — indi bazarı yoxla\n/status — vəziyyət\n/history — son siqnallar\n/pause — skanı dayandır\n/resume — skanı davam etdir\n\n"
+        "/scan — indi bazarı yoxla\n/earn — Earn və bonusları yoxla\n/status — vəziyyət\n/history — son siqnallar\n/pause — skanı dayandır\n/resume — skanı davam etdir\n\n"
         "Real ticarət və pul çıxarma funksiyası bu versiyada bağlıdır."
     )
 
@@ -191,7 +192,8 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN dəyişəni təyin edilməyib.")
     app = Application.builder().token(settings.telegram_token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("scan", scan_cmd))\n    app.add_handler(CommandHandler("earn", earn_cmd))
+    app.add_handler(CommandHandler("scan", scan_cmd))
+    app.add_handler(CommandHandler("earn", earn_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("history", history_cmd))
     app.add_handler(CommandHandler("pause", pause_cmd))
