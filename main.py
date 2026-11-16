@@ -804,6 +804,113 @@ async def history(update, context):
     await update.message.reply_text("\n".join(lines))
 
 
+
+async def creative_request(update, context, kind):
+    if not await private_only(update):
+        return
+    idea = " ".join(context.args).strip()
+    if not idea:
+        examples = {
+            "cartoon": "/cartoon Ayda yaşayan balaca oğlan",
+            "ad": "/ad evdə hazırlanan tort",
+            "song": "/song dostluq və uşaqlıq",
+            "image": "/image sehrli meşədə balaca tülkü"
+        }
+        await update.message.reply_text("Mövzunu da yaz. Nümunə: " + examples[kind])
+        return
+    idea = idea[:700]
+    if kind == "cartoon":
+        answer = (
+            "🎬 CİZGİ FİLMİ LAYİHƏSİ\n"
+            f"Mövzu: {idea}\n\n"
+            "Ad: Sehrli Macəra\n"
+            "Janr: Uşaq animasiyası | Müddət: 1–2 dəqiqə\n"
+            "Personajlar: maraqlı və mehriban baş qəhrəman, köməkçi dost, kiçik maneə.\n\n"
+            "SƏHNƏLƏR\n"
+            "1. Giriş — qəhrəman öz dünyasında qeyri-adi bir sirr görür.\n"
+            "2. Çağırış — sirri araşdırmaq üçün yola çıxır.\n"
+            "3. Macəra — yeni dostla tanış olur və çətinliklə üzləşir.\n"
+            "4. Həll — ağıllı və mehriban davranaraq problemi həll edir.\n"
+            "5. Final — dostluq və cəsarət haqqında xoş mesajla bitir.\n\n"
+            "VİZUAL TƏSVİR\n"
+            f"Rəngarəng, uşaqlar üçün uyğun 3D animasiya üslubu; mövzu: {idea}. "
+            "Personajların görünüşü bütün səhnələrdə eyni saxlanılsın.\n\n"
+            "Qeyd: bot hazırda ssenari və səhnə planı hazırlayır; MP4 animasiya videosunu özü render etmir."
+        )
+    elif kind == "ad":
+        answer = (
+            "📢 REKLAM ÇARXI\n"
+            f"Məhsul/xidmət: {idea}\n\n"
+            "0–3 san: Diqqətçəkən sual və ya problem.\n"
+            "3–8 san: Məhsulu aydın, cəlbedici kadrda göstər.\n"
+            "8–15 san: Əsas üstünlükləri qısa və dürüst təqdim et.\n"
+            "15–20 san: Aydın çağırış — əlaqə saxla və ya ətraflı məlumat al.\n\n"
+            "SƏSLƏNDİRMƏ MƏTNİ\n"
+            f"“{idea} haqqında daha çox öyrən! Sənin ehtiyacına uyğun həlli kəşf et. "
+            "Ətraflı məlumat üçün indi bizimlə əlaqə saxla.”\n\n"
+            "Qeyd: bu, reklam ssenarisidir; video faylı hələ yaradılmır."
+        )
+    elif kind == "song":
+        answer = (
+            "🎵 ORİJİNAL MAHNI MƏTNİ\n"
+            f"Mövzu: {idea}\n\n"
+            "Bənd 1\n"
+            "Yeni bir səhər doğar, ümid düşər qəlbimə,\n"
+            "Bir arzunun işığı yol göstərər hər günə.\n"
+            "Addım-addım irəli, xəyallarım yanımda,\n"
+            "Gözəl bir dünya qurar dostluq hər zamanımda.\n\n"
+            "Nəqarət\n"
+            "Gəl, birlikdə oxuyaq, qoy sevinc yayılsın,\n"
+            "Balaca arzular da böyük ümidə dönsün.\n"
+            "Səsimiz göyə qalxsın, ürəklər işıqlansın,\n"
+            "Bu gözəl hekayəmiz hər kəsə yayılsın!\n\n"
+            "Qeyd: bot sözləri yazır; oxunan audio və musiqi faylı yaratmır."
+        )
+    else:
+        answer = (
+            "🖼️ ŞƏKİL ÜÇÜN HAZIR PROMPT\n"
+            f"Mövzu: {idea}\n\n"
+            "Prompt: Create a polished, colorful, family-friendly illustration of "
+            f"{idea}. Expressive characters, appealing composition, cinematic soft lighting, "
+            "rich details, clean background, high quality, no text, no watermark. "
+            "Keep the character design consistent and suitable for a children's animation.\n\n"
+            "Qeyd: bu, şəkil generatoruna veriləcək təsvir mətnidir; bot hələ şəkil faylı yaratmır."
+        )
+    await update.message.reply_text(answer)
+
+
+async def cartoon(update, context):
+    await creative_request(update, context, "cartoon")
+
+
+async def ad_creator(update, context):
+    await creative_request(update, context, "ad")
+
+
+async def song_creator(update, context):
+    await creative_request(update, context, "song")
+
+
+async def image_creator(update, context):
+    await creative_request(update, context, "image")
+
+
+async def studio(update, context):
+    if not await private_only(update):
+        return
+    await update.message.reply_text(
+        "🎨 TASK WORKER AZ — YARADICI STUDİO\\n"
+        "/cartoon mövzu — cizgi filmi ssenarisi və səhnə planı\\n"
+        "/ad məhsul — reklam çarxının ssenarisi\\n"
+        "/song mövzu — orijinal mahnı sözləri\\n"
+        "/image mövzu — şəkil generatoru üçün prompt\\n\\n"
+        "Vacib: hazırkı bot mətn, ssenari və prompt hazırlaya bilir. "
+        "MP4 video, şəkil faylı və musiqi audiosu yaratmaq üçün ayrıca generasiya xidməti/API və onun icazəli açarı lazımdır. "
+        "Bu xidmət qoşulmayınca bot hazır media faylı yaratdığını iddia etmir."
+    )
+
+
+
 def main():
     if not TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
@@ -812,7 +919,8 @@ def main():
         ("start", start), ("id", myid), ("real", real_mode), ("demo", demo_mode), ("status", status),
         ("tasks", tasks), ("azjobs", azjobs), ("mobile", mobile), ("earn", earn), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
-        ("paid", paid), ("balance", balance), ("history", history)
+        ("paid", paid), ("balance", balance), ("history", history),
+        ("studio", studio), ("cartoon", cartoon), ("ad", ad_creator), ("song", song_creator), ("image", image_creator)
     ]:
         app.add_handler(CommandHandler(name, handler))
     app.add_handler(CallbackQueryHandler(mode_callback, pattern=r"^task_mode_"))
