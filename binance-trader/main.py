@@ -29,13 +29,14 @@ async def send_owner(app, message: str):
 def fmt_signal(symbol, market, s, approved, note):
     if s.get("action") not in {"LONG", "SHORT"}:
         return None
+    leverage_text = "Spot — leverage yoxdur" if market == "spot" else str(s.get("leverage", 1)) + "x"
     return (
         f"📊 {market.upper()} | {symbol}\n"
         f"Siqnal: {s['action']} | Etibarlılıq: {s.get('confidence', 0)}%\n"
         f"Giriş: {s.get('price', 0):.6g}\n"
         f"Stop-Loss: {s.get('stop_loss', 0):.6g}\n"
         f"Take-Profit: {s.get('take_profit', 0):.6g}\n"
-        f"Leverage təklifi: {s.get('leverage', 1)}x\n"
+        f"Leverage: {leverage_text}\n"
         f"Risk yoxlaması: {'KEÇDİ' if approved else 'İMTİNA'}\n"
         f"Səbəb: {note}\n"
         "Qeyd: Bu versiya TESTNET/analiz üçündür; real ticarət bağlıdır."
@@ -68,12 +69,15 @@ async def scan_all(app, manual=False):
                 continue
             try:
                 signal = await asyncio.to_thread(scan_market, symbol, futures)
-                approved, note, sizing = approve_trade(signal, settings.risk_equity_usd, settings)
-                save_signal(settings.database_path, symbol, market_name, signal, approved, note)
+                if market_name == "futures":
+                    approved, note, sizing = approve_trade(signal, settings.risk_equity_usd, settings)
+                else:
+                    approved, note, sizing = False, "Spot hazırda yalnız siqnal rejimindədir; sifariş açılmır.", {}
+                notify = save_signal(settings.database_path, symbol, market_name, signal, approved, note)
                 text = fmt_signal(symbol, market_name, signal, approved, note)
-                if text:
+                if text and notify:
                     messages.append(text)
-                if market_name == "spot" and signal.get("long_term_action") == "BUY":
+                if notify and market_name == "spot" and signal.get("long_term_action") == "BUY":
                     zone = signal.get("long_term_buy_zone")
                     zone_text = f"{zone[0]} – {zone[1]}" if zone else "hesablanmayıb"
                     messages.append(
