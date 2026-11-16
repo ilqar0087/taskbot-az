@@ -9,12 +9,13 @@ from market import make_exchange, get_snapshot
 from analysis import analyse
 from risk import approve_trade
 from store import save_signal, recent
+from earn import fetch_earn_products, fetch_campaign_headlines, format_earn_report
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ai-binance-trader")
 settings = Settings()
 PAUSED = False
-LAST_SCAN = "Hələ skan edilməyib"
+LAST_SCAN = "Hələ skan edilməyib"\nLAST_EARN_SCAN = None
 
 def owner_only(update: Update) -> bool:
     return bool(settings.owner_id) and str(update.effective_user.id) == settings.owner_id
@@ -97,6 +98,21 @@ async def scan_all(app, manual=False):
         return "\n\n".join(messages) if messages else "Hazırda təsdiqlənmiş alış/satış siqnalı yoxdur. Bot gözləyir."
     return "Skan tamamlandı."
 
+async def earn_report():
+    products = await asyncio.to_thread(fetch_earn_products, settings.api_key, settings.api_secret)
+    feed_url = __import__("os").getenv("BINANCE_ANNOUNCEMENTS_RSS_URL", "")
+    campaigns = await asyncio.to_thread(fetch_campaign_headlines, feed_url) if feed_url else []
+    return format_earn_report(products, campaigns)
+
+async def earn_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not owner_only(update): return
+    await update.message.reply_text("Binance Earn və kampaniya imkanları yoxlanılır...")
+    try:
+        report = await earn_report()
+        await update.message.reply_text(report[:3900], disable_web_page_preview=True)
+    except Exception as exc:
+        await update.message.reply_text(f"Earn məlumatı alınmadı: {str(exc)[:500]}")
+
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not owner_only(update):
         await update.message.reply_text("Bu bot şəxsi idarəetmə üçündür. Sahib hesabı ilə daxil olun.")
@@ -167,7 +183,7 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN dəyişəni təyin edilməyib.")
     app = Application.builder().token(settings.telegram_token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start_cmd))
-    app.add_handler(CommandHandler("scan", scan_cmd))
+    app.add_handler(CommandHandler("scan", scan_cmd))\n    app.add_handler(CommandHandler("earn", earn_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("history", history_cmd))
     app.add_handler(CommandHandler("pause", pause_cmd))
