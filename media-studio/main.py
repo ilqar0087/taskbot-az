@@ -29,6 +29,8 @@ MENU = InlineKeyboardMarkup([
     [InlineKeyboardButton("🎵 Musiqi yarat", callback_data="music"),
      InlineKeyboardButton("📢 Reklam çarxı", callback_data="ad")],
     [InlineKeyboardButton("ℹ️ Kömək", callback_data="help")],
+    [InlineKeyboardButton("🧪 DEMO", callback_data="media_mode_demo"),
+     InlineKeyboardButton("🚀 REAL", callback_data="media_mode_real")],
 ])
 
 LABELS = {
@@ -155,7 +157,7 @@ def make_video(chat_id, poster_path, audio_path):
 
 async def begin(update, context, mode):
     chat_id = update.effective_chat.id
-    SESSIONS[chat_id] = {"mode": mode, "photo": None}
+    SESSIONS[chat_id] = {"mode": mode, "photo": None, "run_mode": context.user_data.get("media_mode", "demo")}
     await update.effective_message.reply_text(
         f"✅ {LABELS[mode]} seçildi.\n"
         "Mövzunu, reklam mətnini və istədiyin üslubu yaz. İstəsən, əvvəlcə şəkil də göndərə bilərsən."
@@ -163,10 +165,13 @@ async def begin(update, context, mode):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mode = context.user_data.get("media_mode", "demo")
     await update.message.reply_text(
         "Salam! 👋 AI Media Studio\n"
-        "Poster, qısa video, orijinal fon musiqisi və reklam maketi hazırlaya bilərəm.\n\n"
-        "Xidməti seç:",
+        f"Rejim: {'DEMO' if mode == 'demo' else 'REAL fayl hazırlama'}\n"
+        "Poster, qısa video, instrumental fon musiqisi və reklam maketi hazırlaya bilərəm.\n"
+        "Qeyd: hazırkı generator lokal şablonlardan istifadə edir; xarici peşəkar AI modeli hələ qoşulmayıb.\n\n"
+        "Xidməti və rejimi seç:",
         reply_markup=MENU
     )
 
@@ -182,6 +187,17 @@ async def help_cmd(update, context):
 async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
+    if q.data == "media_mode_demo":
+        context.user_data["media_mode"] = "demo"
+        await q.message.reply_text("🧪 DEMO rejimi seçildi. Nümunə media faylları hazırlaya bilərsən.")
+        return
+    if q.data == "media_mode_real":
+        context.user_data["media_mode"] = "real"
+        await q.message.reply_text(
+            "🚀 REAL rejimi seçildi. Bot göndərilə bilən şəkil/video/audio faylları yaradır. "
+            "Qeyd: hələ xarici peşəkar AI generasiya API-si qoşulmayıb; lokal şablon generatoru işləyir."
+        )
+        return
     if q.data == "help":
         await q.message.reply_text(
             "Xidməti seç, ideyanı yaz; foto göndərmək də olar. Hazırda şablon əsaslı poster, video və sadə instrumental audio yaradıram."
@@ -230,7 +246,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video = await asyncio.to_thread(make_video, chat_id, poster, audio)
                 with open(video, "rb") as f:
                     await update.message.reply_video(video=f, caption="Hazır qısa video / reklam maketi")
-        await update.message.reply_text("Yeni iş üçün xidməti seç:", reply_markup=MENU)
+        run_mode = session.get("run_mode", "demo")
+        await update.message.reply_text(
+            f"İş tamamlandı ({'DEMO' if run_mode == 'demo' else 'REAL fayl rejimi'}). Yeni iş üçün xidməti seç:",
+            reply_markup=MENU
+        )
         SESSIONS.pop(chat_id, None)
     except Exception as exc:
         log.exception("Media generation failed")
