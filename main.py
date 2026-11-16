@@ -20,18 +20,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("task-worker")
 
 SITES = [
-    ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Açıq mənbə proqramlaşdırma mükafatları; hər elanın şərtlərini yoxla."),
-    ("Algora", "https://algora.io/", "Açıq mənbə issue-ləri üçün bounty platforması; iştirak şərtləri dəyişir."),
-    ("Superteam Earn", "https://superteam.fun/earn", "Yalnız elanda AI agentə açıq icazə varsa avtomatlaşdırma kömək edə bilər."),
-    ("make.fun", "https://make.fun/", "AI agentlər üçün yarışma və bounty elanları; ödəniş yalnız qalibiyyət və qəbuldan sonra."),
-    ("Clustly", "https://www.clustly.ai/", "Agent xidmətləri və sifarişlər; escrow və müştəri təsdiqi tələb oluna bilər."),
-    ("BasedAgents", "https://basedagents.ai/", "Agent tapşırıqları; mükafat və şərtləri hər elanda yoxla."),
-    ("TaskMarket", "https://taskmarket.dev/", "Agent tapşırıqları; bəzi əməliyyatlar ödəniş və ya wallet tələb edə bilər."),
-    ("Clickworker", "https://www.clickworker.com/clickworker/", "İnsan hesabı ilə mikrotapşırıqlar; botla klikləmək və saxta sübut göndərmək olmaz."),
-    ("Toloka", "https://toloka.ai/tolokers/", "İnsan tərəfindən görülən tapşırıqlar; yalnız qaydalar açıq icazə verəndə AI köməyi."),
-    ("SproutGigs", "https://sproutgigs.com/", "İnsan mikroişləri; platforma qaydalarını pozan avtomatlaşdırma olmaz."),
-    ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı; profil, təklif və müştəri yazışması insan təsdiqi ilə."),
-    ("Upwork", "https://www.upwork.com/", "Freelance layihələr; müraciət və müştəri ünsiyyəti insan təsdiqi ilə."),
+    ("Microworkers", "https://www.microworkers.com/", "Kiçik onlayn tapşırıqlar. Ödəniş üsulu, minimum çıxarış və KYC-ni hesabda yoxla; tapşırıq sayı ölkəyə görə dəyişir."),
+    ("Mindrift", "https://www.mindrift.ai/", "AI mətn qiymətləndirmə və təlim layihələri. Azərbaycan üzrə qəbul və ödəniş üsulunu əvvəlcədən təsdiqlə."),
+    ("Clickworker", "https://www.clickworker.com/clickworker/", "Mikrotapşırıqlar və AI data işi. Azərbaycan qeydiyyatı və ödəniş üsulu Payment details bölməsində təsdiqlənməlidir."),
+    ("CrowdGen by Appen", "https://crowdgen.com/", "AI data layihələri. Layihənin Azərbaycana açıq olmasını və ödəniş metodunu hər elanda yoxla."),
+    ("Work.az", "https://work.az/", "Azərbaycan üzrə yerli işlər. Müştəri ilə qiyməti, son tarixi və ödənişi yazılı razılaşdır."),
+    ("Upwork", "https://www.upwork.com/", "Beynəlxalq freelance layihələr. Komissiya və Azərbaycanda işləyən çıxarış üsulunu əvvəlcədən yoxla."),
+    ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı. Sifarişlər insan təsdiqi ilə; Azərbaycanda işləyən çıxarış metodunu yoxla."),
+    ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Yalnız real pul məbləği, açıq issue və təsdiqlənən orijinal mənbə olan bounty elanları."),
+    ("Algora", "https://algora.io/", "Açıq mənbə bounty-ləri. Pul mükafatı, uyğunluq və payout şərtlərini hər işdə yoxla."),
 ]
 
 GITHUB_QUERIES = [
@@ -42,6 +39,13 @@ GITHUB_QUERIES = [
 HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
 AGENT_PERMISSION = ("ai agents are welcome", "ai agents may", "agents are explicitly allowed", "autonomous agents are allowed", "agent submissions are allowed", "bot submissions are allowed", "automation is explicitly allowed")
 JUNK_PHRASES = ("banana pudding", "bananarmonics", "stereogustatory", "recursive ontological singularity", "five-fold esoteric", "opire singularity council")
+NO_CASH_PHRASES = (
+    "no cash allocated", "does not currently have cash", "no cash reward",
+    "not a cash bounty", "cash is not guaranteed", "cash not guaranteed",
+    "deferred ledger", "recognition-only", "recognition only", "token-only",
+    "paid in tokens", "token reward only", "no monetary reward", "no payment",
+    "unpaid", "volunteer", "for recognition only"
+)
 MONEY_RE = re.compile(r"\$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD|ETH|SOL)", re.I)
 SOURCE_URL_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\d+", re.I)
 
@@ -87,7 +91,12 @@ def verify_github_issue(url):
             issue = json.loads(response.read().decode("utf-8"))
         if issue.get("state") != "open" or issue.get("pull_request"):
             return False, "Orijinal elan açıq deyil və ya issue deyil"
-        return True, (issue.get("title") or "") + "\n" + (issue.get("body") or "")
+        if issue.get("assignees"):
+            return False, "Orijinal elan artıq icraçıya təyin edilib"
+        content = (issue.get("title") or "") + "\n" + (issue.get("body") or "")
+        if any(term in content.lower() for term in NO_CASH_PHRASES):
+            return False, "Elan nağd pul ödənişi deyil və ya ödəniş təmin edilməyib"
+        return True, content
     except Exception as exc:
         return False, "Orijinal elan yoxlanmadı (%s)" % type(exc).__name__
 
@@ -135,22 +144,26 @@ def fetch_github_bounties():
                 if any(phrase in lowered for phrase in JUNK_PHRASES):
                     continue
                 source_url = extract_source_url(body, item["html_url"])
+                # Only show canonical, verified, open, unassigned cash bounty issues.
                 verified, source_content = verify_github_issue(source_url)
-                is_mirror = source_url.rstrip("/") != item["html_url"].rstrip("/")
-                if is_mirror and not verified:
+                if not verified or not isinstance(source_content, str):
+                    continue
+                if item.get("assignees"):
+                    continue
+                if any(term in source_content.lower() for term in NO_CASH_PHRASES):
                     continue
                 if verified and isinstance(source_content, str):
                     source_title, _, source_body = source_content.partition("\n")
                     if source_title:
                         title = source_title.strip()
                     reward_text = parse_reward(title, source_body)
+                    if reward_text == "Mükafat təsdiqlənməyib":
+                        continue
                     eligibility = classify_eligibility(title + "\n" + source_body)
                     summary_source = source_body
                 else:
-                    reward_text = parse_reward(title, body)
-                    eligibility = classify_eligibility(combined)
-                    summary_source = body
-                verification = "ORIGINAL_VERIFIED" if verified else "SOURCE_NOT_VERIFIED"
+                    continue
+                verification = "ORIGINAL_VERIFIED_CASH_REWARD"
                 summary = "[%s] %s" % (verification, re.sub(r"\s+", " ", summary_source).strip()[:450])
                 found.append({
                     "source": "GitHub", "title": title[:240], "url": source_url,
@@ -259,7 +272,8 @@ async def tasks(update, context):
         return
     lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
     lines += [f"\n{i}. {name}\n{note}\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
-    lines.append("\nBot yalnız açıq elanları tapır. Ölkə uyğunluğu, hesab tələbləri və ödəniş hər platformada ayrıca yoxlanmalıdır.")
+    lines.append("\nAzərbaycanda qeydiyyat və pul çıxarışı hər hesabda fərqli ola bilər. İşə başlamazdan əvvəl payout metodunu yoxla. İş almaq üçün heç bir sayta depozit ödəmə.")
+    lines.append("GitHub skanında yalnız açıq, orijinalı təsdiqlənmiş, icraçıya verilməmiş və rəqəmlə göstərilən USD/USDC mükafatlı elanlar göstərilir. Token və qeyri-müəyyən mükafatlar çıxarılır.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
