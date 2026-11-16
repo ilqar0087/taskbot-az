@@ -40,8 +40,56 @@ GITHUB_QUERIES = [
     'is:issue is:open "reward" "USDC"',
 ]
 HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
-AGENT_WORDS = ("agent allowed", "ai agent", "agent-only", "agent only", "autonomous agent")
-REWARD_RE = re.compile(r"(?:\$\s?\d[\d,]*(?:\.\d{1,2})?|\d[\d,]*(?:\.\d{1,2})?\s?(?:USDC|USD|ETH|SOL))", re.I)
+AGENT_PERMISSION = ("ai agents are welcome", "ai agents may", "agents are explicitly allowed", "autonomous agents are allowed", "agent submissions are allowed", "bot submissions are allowed", "automation is explicitly allowed")
+JUNK_PHRASES = ("banana pudding", "bananarmonics", "stereogustatory", "recursive ontological singularity", "five-fold esoteric", "opire singularity council")
+MONEY_RE = re.compile(r"\$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD|ETH|SOL)", re.I)
+SOURCE_URL_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\d+", re.I)
+
+def extract_source_url(body, fallback):
+    match = SOURCE_URL_RE.search(body or "")
+    return match.group(0).rstrip(").,") if match else fallback
+
+def parse_reward(title, body):
+    clean_body = re.split(r"积分币奖励|coin reward", body or "", flags=re.I)[0]
+    candidates = []
+    for line in (title + "\n" + clean_body).splitlines():
+        if re.search(r"real reward|cash reward|bounty|reward|赏金", line, re.I):
+            for match in MONEY_RE.finditer(line):
+                if match.group(1):
+                    amount = float(match.group(1).replace(",", ""))
+                    suffix = (match.group(2) or "").lower()
+                    amount *= 1000 if suffix == "k" else 1000000 if suffix == "m" else 1
+                    candidates.append(amount)
+                elif match.group(3) and (match.group(4) or "").upper() in ("USD", "USDC"):
+                    candidates.append(float(match.group(3).replace(",", "")))
+    if not candidates:
+        return "Mükafat təsdiqlənməyib"
+    amount = max(candidates)
+    return "$" + format(amount, ",.0f") if amount % 1 == 0 else "$" + format(amount, ",.2f")
+
+def classify_eligibility(text):
+    lowered = (text or "").lower()
+    if any(word in lowered for word in HUMAN_ONLY):
+        return "HUMAN_ONLY — avtomatlaşdırma etmə"
+    if any(phrase in lowered for phrase in AGENT_PERMISSION):
+        return "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla"
+    return "REVIEW_REQUIRED — AI agent icazəsi açıq təsdiqlənməyib"
+
+def verify_github_issue(url):
+    match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)", url or "")
+    if not match:
+        return False, "Orijinal GitHub issue linki tapılmadı"
+    owner, repo, number = match.groups()
+    api_url = "https://api.github.com/repos/%s/%s/issues/%s" % (owner, repo, number)
+    req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            issue = json.loads(response.read().decode("utf-8"))
+        if issue.get("state") != "open" or issue.get("pull_request"):
+            return False, "Orijinal elan açıq deyil və ya issue deyil"
+        return True, (issue.get("title") or "") + "\n" + (issue.get("body") or "")
+    except Exception as exc:
+        return False, "Orijinal elan yoxlanmadı (%s)" % type(exc).__name__
 
 
 def mode_keyboard(mode="demo"):
@@ -70,7 +118,7 @@ def connect():
 
 def fetch_github_bounties():
     found = []
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/1.0"}
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.0"}
     for query in GITHUB_QUERIES:
         params = urllib.parse.urlencode({"q": query, "sort": "updated", "order": "desc", "per_page": 20})
         req = urllib.request.Request("https://api.github.com/search/issues?" + params, headers=headers)
@@ -80,29 +128,40 @@ def fetch_github_bounties():
             for item in payload.get("items", []):
                 title = (item.get("title") or "").strip()
                 body = item.get("body") or ""
-                labels = [x.get("name", "") for x in item.get("labels", [])]
-                text = (title + " " + body + " " + " ".join(labels)).lower()
                 if not title or not item.get("html_url"):
                     continue
-                if any(word in text for word in HUMAN_ONLY):
-                    eligibility = "HUMAN_ONLY"
-                elif any(word in text for word in AGENT_WORDS):
-                    eligibility = "AGENT_ALLOWED — yenə də şərtləri yoxla"
+                combined = title + "\n" + body
+                lowered = combined.lower()
+                if any(phrase in lowered for phrase in JUNK_PHRASES):
+                    continue
+                source_url = extract_source_url(body, item["html_url"])
+                verified, source_content = verify_github_issue(source_url)
+                is_mirror = source_url.rstrip("/") != item["html_url"].rstrip("/")
+                if is_mirror and not verified:
+                    continue
+                if verified and isinstance(source_content, str):
+                    source_title, _, source_body = source_content.partition("\n")
+                    if source_title:
+                        title = source_title.strip()
+                    reward_text = parse_reward(title, source_body)
+                    eligibility = classify_eligibility(title + "\n" + source_body)
+                    summary_source = source_body
                 else:
-                    eligibility = "REVIEW_REQUIRED — AI agent icazəsi təsdiqlənməyib"
-                reward_match = REWARD_RE.search(title + " " + body)
-                reward = reward_match.group(0) if reward_match else "Mükafat göstərilməyib"
+                    reward_text = parse_reward(title, body)
+                    eligibility = classify_eligibility(combined)
+                    summary_source = body
+                verification = "ORIGINAL_VERIFIED" if verified else "SOURCE_NOT_VERIFIED"
+                summary = "[%s] %s" % (verification, re.sub(r"\s+", " ", summary_source).strip()[:450])
                 found.append({
-                    "source": "GitHub", "title": title[:240], "url": item["html_url"],
-                    "reward": reward, "eligibility": eligibility,
-                    "summary": re.sub(r"\s+", " ", body).strip()[:500],
+                    "source": "GitHub", "title": title[:240], "url": source_url,
+                    "reward": reward_text, "eligibility": eligibility,
+                    "summary": summary,
                     "updated": item.get("updated_at") or datetime.now(timezone.utc).isoformat(),
                 })
         except Exception as exc:
             log.warning("GitHub task scan failed: %s", exc)
     unique = {item["url"]: item for item in found}
     return list(unique.values())[:40]
-
 
 def save_opportunities(items):
     new_items = []
