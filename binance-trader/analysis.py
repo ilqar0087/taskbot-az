@@ -65,6 +65,9 @@ def analyse(snapshot: dict, max_leverage: int = 10) -> dict:
         votes[tf] = vote
         detail[tf] = metrics
     weighted = votes.get("15m", 0) + 2 * votes.get("1h", 0) + 3 * votes.get("4h", 0)
+    long_score = votes.get("1d", 0) + 2 * votes.get("1w", 0)
+    long_term_action = "BUY" if long_score >= 5 else "WAIT"
+    long_term_confidence = min(99, 50 + abs(long_score) * 6)
     bids = snapshot["orderbook"].get("bids", [])
     asks = snapshot["orderbook"].get("asks", [])
     bid_qty = sum(float(x[1]) for x in bids[:10])
@@ -79,6 +82,8 @@ def analyse(snapshot: dict, max_leverage: int = 10) -> dict:
 
     price = float(snapshot["last"])
     rows = snapshot["candles"]["1h"]
+    daily_rows = snapshot["candles"]["1d"]
+    daily_ema20 = ema([float(x[4]) for x in daily_rows], 20)
     volatility = atr(rows)
     if not price or not volatility or not isfinite(volatility):
         return {"action": "WAIT", "reason": "Kifayət qədər bazar məlumatı yoxdur."}
@@ -118,5 +123,9 @@ def analyse(snapshot: dict, max_leverage: int = 10) -> dict:
         "orderbook_imbalance": round(imbalance, 3), "funding": funding,
         "spread_pct": round(snapshot.get("spread_pct", 0), 4),
         "votes": votes, "metrics": detail,
+        "long_term_action": long_term_action,
+        "long_term_confidence": long_term_confidence,
+        "long_term_horizon": "1 həftə–1 ay",
+        "long_term_buy_zone": [round(daily_ema20 * 0.98, 8), round(daily_ema20 * 1.02, 8)] if daily_ema20 else None,
         "reason": "Çoxzamanlı trend, momentum, həcm, order-book və funding yoxlaması."
     }
