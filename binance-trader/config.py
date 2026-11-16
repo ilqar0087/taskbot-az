@@ -25,6 +25,7 @@ class Settings:
     risk_per_trade_pct: float = min(1.0, max(0.1, float(os.getenv("RISK_PER_TRADE_PCT", "0.5"))))
     daily_loss_limit_pct: float = min(5.0, max(0.5, float(os.getenv("DAILY_LOSS_LIMIT_PCT", "2.0"))))
     max_drawdown_pct: float = min(10.0, max(1.0, float(os.getenv("MAX_DRAWDOWN_PCT", "5.0"))))
+    risk_equity_usd: float = max(0.0, float(os.getenv("RISK_EQUITY_USD", "0")))
     database_path: str = os.getenv("DATABASE_PATH", "/data/trader.sqlite3")
 
     def validate(self) -> None:
