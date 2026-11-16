@@ -7,6 +7,7 @@ Telegram assistant for discovering public open-source bounty issues, listing wor
 - `/scan` — searches public GitHub issues for open bounty/reward opportunities; automatic background scan runs every 6 hours and sends only new matches to the owner
 - `/opportunities` — shows discovered issues
 - `/view ID` — shows details, reward hints, and AI-eligibility classification
+- `/prepare ID` — prepares an editable application draft without inventing the applicant's experience or sending it automatically
 - `/tasks` — lists other task marketplaces
 - `/done ID note`, `/paid ID amount note`, `/balance`, `/history`
 
