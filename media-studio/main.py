@@ -285,10 +285,17 @@ async def media_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await tg_file.download_to_drive(custom_path=str(source))
     SESSIONS[chat_id] = {"mode": "convert", "source": str(source), "source_name": file_name,
                          "run_mode": context.user_data.get("media_mode", "demo")}
-    await msg.reply_text(
-        f"✅ Fayl qəbul edildi: {file_name}\nHansı formata çevirim?",
-        reply_markup=FORMAT_MENU
-    )
+    audio_suffixes = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
+    if suffix in audio_suffixes:
+        await msg.reply_text(
+            f"✅ Audio qəbul edildi: {file_name}\nİndi istədiyin AI əməliyyatını seç:",
+            reply_markup=AI_MENU
+        )
+    else:
+        await msg.reply_text(
+            f"✅ Video qəbul edildi: {file_name}\nÇıxış formatını seç:",
+            reply_markup=FORMAT_MENU
+        )
 
 
 async def begin(update, context, mode):
@@ -306,7 +313,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Salam! 👋 AI Media Studio\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL fayl hazırlama'}\n"
         "Poster, qısa video, instrumental fon musiqisi, reklam maketi və audio/video format çevirmə.\n"
-        "Qeyd: hazırkı generator lokal şablonlardan istifadə edir; xarici peşəkar AI modeli hələ qoşulmayıb.\n\n"
+        "AI audio funksiyaları üçün fal.ai hesabından FAL_KEY açarı tələb olunur.\n\n"
         "Xidməti və rejimi seç:",
         reply_markup=MENU
     )
@@ -390,7 +397,7 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if q.data == "help":
         await q.message.reply_text(
-            "Xidməti seç, ideyanı yaz; foto göndərmək də olar. Hazırda şablon əsaslı poster, video və sadə instrumental audio yaradıram."
+            "Audio yüklə: vokal/alət ayırma, vokal təmizləmə və AI musiqi transformasiyası. Video və audio format çevirmə də mövcuddur. AI üçün FAL_KEY tələb olunur."
         )
         return
     if q.data in LABELS:
