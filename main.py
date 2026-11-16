@@ -16,6 +16,11 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or os.getenv("BOT_TOKEN", "").strip()
 OWNER = os.getenv("OWNER_TELEGRAM_ID", "")
 DB = os.getenv("DATABASE_PATH", "/data/taskbot.sqlite3")
+# WhatsApp Cloud API credentials are configured by the owner in Railway variables.
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+WHATSAPP_TO = re.sub(r"[^0-9]", "", os.getenv("WHATSAPP_TO", ""))
+WHATSAPP_API_VERSION = os.getenv("WHATSAPP_API_VERSION", "v27.0").strip()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 # Avoid logging HTTP URLs that contain Telegram bot API tokens.
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -805,6 +810,36 @@ async def history(update, context):
 
 
 
+def _whatsapp_post(payload):
+    if not (WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_TO):
+        raise RuntimeError("WhatsApp sazlanmayıb. Railway dəyişənlərini əlavə et.")
+    url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"WhatsApp göndərişi alınmadı: {type(exc).__name__}") from None
+    if not result.get("messages"):
+        raise RuntimeError("WhatsApp API mesaj ID-si qaytarmadı.")
+    return result["messages"][0].get("id", "")
+
+
+async def send_whatsapp_text(text):
+    payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": WHATSAPP_TO, "type": "text", "text": {"preview_url": False, "body": text[:4000]}}
+    return await asyncio.to_thread(_whatsapp_post, payload)
+
+
+async def send_whatsapp_media(media_url, media_type="video", caption=""):
+    if media_type not in {"video", "image", "audio", "document"}:
+        raise ValueError("Dəstəklənməyən WhatsApp media növü.")
+    media = {"link": media_url}
+    if media_type in {"video", "image", "document"} and caption:
+        media["caption"] = caption[:1000]
+    payload = {"messaging_product": "whatsapp", "recipient_type": "individual", "to": WHATSAPP_TO, "type": media_type, media_type: media}
+    return await asyncio.to_thread(_whatsapp_post, payload)
+
 async def creative_request(update, context, kind):
     if not await private_only(update):
         return
@@ -876,7 +911,15 @@ async def creative_request(update, context, kind):
             "Keep the character design consistent and suitable for a children's animation.\n\n"
             "Qeyd: bu, şəkil generatoruna veriləcək təsvir mətnidir; bot hələ şəkil faylı yaratmır."
         )
-    await update.message.reply_text(answer)
+    if WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_TO:
+        try:
+            await send_whatsapp_text(answer)
+            await update.message.reply_text("Mətn WhatsApp nömrənə göndərildi.")
+        except Exception as exc:
+            log.warning("WhatsApp delivery failed: %s", type(exc).__name__)
+            await update.message.reply_text("WhatsApp göndərişi alınmadı. Railway dəyişənlərini və Meta icazələrini yoxla.")
+    else:
+        await update.message.reply_text(answer + "\n\nWhatsApp üçün Railway-də WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID və WHATSAPP_TO dəyişənlərini əlavə et.")
 
 
 async def cartoon(update, context):
