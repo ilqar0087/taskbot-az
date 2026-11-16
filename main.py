@@ -960,7 +960,7 @@ async def creative_request(update, context, kind):
             log.exception("Magic Hour media generation failed")
             await update.message.reply_text(
                 "⚠️ Media yaratmaq alınmadı: " + str(exc)[:350] +
-                "\nAçarı, fal.ai balansını və model icazəsini yoxla. Heç bir hazır fayl yaradılmış kimi göstərilmir."
+                "\nMagic Hour API açarını və pulsuz kredit balansını yoxla. Heç bir ödəniş edilmədi."
             )
         return
 
@@ -1001,11 +1001,11 @@ async def studio(update, context):
     if not await private_only(update):
         return
     await update.message.reply_text(
-        "🎨 TASK WORKER AZ — YARADICI STUDİO\\n"
-        "/cartoon mövzu — 5 saniyəlik cizgi video\\n"
-        "/ad məhsul — 5 saniyəlik reklam videosu\\n"
-        "/song mövzu — mövzu üzrə səsli mətn (musiqili mahnı deyil)\\n"
-        "/image mövzu — PNG şəkil\\n\\n"
+        "🎨 TASK WORKER AZ — YARADICI STUDİO\n"
+        "/cartoon mövzu — 5 saniyəlik cizgi video\n"
+        "/ad məhsul — 5 saniyəlik reklam videosu\n"
+        "/song mövzu — mövzu üzrə səsli mətn (musiqili mahnı deyil)\n"
+        "/image mövzu — PNG şəkil\n\n"
         "Magic Hour API üçün Railway-də MAGIC_HOUR_API_KEY dəyişənini əlavə et. "
         "Bot yalnız Free/Trial hesabı və müsbət pulsuz kredit balansını qəbul edir; ödənişli və naməlum planları bloklayır. "
         "Kredit 0 olduqda yeni generasiya sorğusu göndərilmir. API-də musiqi bəstələmə endpoint-i təsdiqlənmədiyi üçün /song yalnız səsli mətn yaradır. "
