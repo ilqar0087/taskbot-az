@@ -157,15 +157,15 @@ async def begin(update, context, mode):
     chat_id = update.effective_chat.id
     SESSIONS[chat_id] = {"mode": mode, "photo": None}
     await update.effective_message.reply_text(
-        f"✅ {LABELS[mode]} seçildi.\\n"
+        f"✅ {LABELS[mode]} seçildi.\n"
         "Mövzunu, reklam mətnini və istədiyin üslubu yaz. İstəsən, əvvəlcə şəkil də göndərə bilərsən."
     )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Salam! 👋 AI Media Studio\\n"
-        "Poster, qısa video, orijinal fon musiqisi və reklam maketi hazırlaya bilərəm.\\n\\n"
+        "Salam! 👋 AI Media Studio\n"
+        "Poster, qısa video, orijinal fon musiqisi və reklam maketi hazırlaya bilərəm.\n\n"
         "Xidməti seç:",
         reply_markup=MENU
     )
@@ -174,7 +174,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_cmd(update, context):
     await update.message.reply_text(
         "1) Xidmət seç. 2) İdeyanı yaz. 3) İstəsən foto göndər. "
-        "Bot poster, qısa video və sadə instrumental fon musiqisi hazırlayır.\\n\\n"
+        "Bot poster, qısa video və sadə instrumental fon musiqisi hazırlayır.\n\n"
         "Qeyd: bu ilkin versiya şablon və lokal generasiya ilə işləyir; peşəkar AI şəkil/video/musiqi modelləri qoşulmayıb."
     )
 
