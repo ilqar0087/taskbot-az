@@ -806,96 +806,137 @@ async def history(update, context):
 
 
 
-def fal_request(model, payload):
-    """Submit a fal.ai job, wait for completion, and return its JSON result."""
-    api_key = os.getenv("FAL_KEY", "").strip()
+
+def magichour_request(method, path, payload=None):
+    """Call Magic Hour API with a server-side key; never expose the key in logs."""
+    api_key = os.getenv("MAGIC_HOUR_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("FAL_KEY açarı Railway dəyişənlərində yoxdur.")
-    base = "https://queue.fal.run/" + model
-    headers = {"Authorization": "Key " + api_key, "Content-Type": "application/json"}
-    req = urllib.request.Request(base, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=45) as response:
-        job = json.loads(response.read().decode("utf-8"))
-    status_url = job.get("status_url")
-    response_url = job.get("response_url")
-    if not status_url or not response_url:
-        raise RuntimeError("fal.ai növbə cavabı natamamdır.")
-    import time
-    deadline = time.time() + int(os.getenv("FAL_JOB_TIMEOUT_SECONDS", "360"))
-    while time.time() < deadline:
-        with urllib.request.urlopen(urllib.request.Request(status_url, headers={"Authorization": "Key " + api_key}), timeout=30) as response:
-            status = json.loads(response.read().decode("utf-8"))
-        if status.get("status") == "COMPLETED":
-            if status.get("error"):
-                raise RuntimeError("Generasiya xətası: " + str(status["error"])[:300])
-            with urllib.request.urlopen(urllib.request.Request(response_url, headers={"Authorization": "Key " + api_key}), timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
-        time.sleep(3)
-    raise TimeoutError("Generasiya hələ bitməyib. Bir az sonra yenidən yoxla.")
+        raise RuntimeError("MAGIC_HOUR_API_KEY Railway dəyişənində yoxdur.")
+    url = "https://api.magichour.ai/v1" + path
+    headers = {"Authorization": "Bearer " + api_key, "Accept": "application/json",
+               "Content-Type": "application/json", "User-Agent": "TaskWorkerAZ/1.0"}
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            raw = response.read()
+        return json.loads(raw.decode("utf-8")) if raw else {}
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:400]
+        if exc.code == 402:
+            raise RuntimeError("Pulsuz kredit kifayət etmir və ya funksiya plan tələb edir. Sorğu dayandırıldı.") from None
+        if exc.code == 401:
+            raise RuntimeError("Magic Hour API açarı yanlışdır və ya aktiv deyil.") from None
+        raise RuntimeError("Magic Hour API xətası (%s): %s" % (exc.code, detail)) from None
 
 
-def fal_media_url(data, kind):
-    item = data.get(kind)
-    if isinstance(item, dict) and item.get("url"):
-        return item["url"]
-    if kind == "image" and data.get("images"):
-        return data["images"][0].get("url")
-    if kind == "image" and data.get("images") and isinstance(data["images"][0], dict):
-        return data["images"][0].get("url")
-    raise RuntimeError("Model nəticəsində hazır media faylının linki tapılmadı.")
+def magichour_free_account_check():
+    """Only allow a free/trial account with credits; reject paid/unknown tiers."""
+    account = magichour_request("GET", "/account")
+    tier = str(account.get("tier", "")).strip().lower()
+    credits = account.get("credits", 0)
+    subscription = account.get("subscription") or {}
+    sub_status = str(subscription.get("status", "")).strip().lower()
+    if tier not in {"free", "trial"}:
+        raise RuntimeError("Pulsuz rejim təhlükəsizliyi üçün yalnız Free/Trial hesabı qəbul edilir. Hesab planı: %s." % (tier or "naməlum"))
+    if sub_status == "active":
+        raise RuntimeError("Aktiv abunə görünür. Ödəniş riskinə görə generasiya bloklandı.")
+    try:
+        credits = float(credits)
+    except (TypeError, ValueError):
+        credits = 0
+    if credits <= 0:
+        raise RuntimeError("Pulsuz kredit balansı 0-dır. Generasiya sorğusu göndərilmədi.")
+    return credits
 
 
-async def create_and_send_media(update, kind, idea):
-    """Generate a real image/video/song with fal.ai and send it back in Telegram."""
-    if kind == "image":
-        model = os.getenv("FAL_IMAGE_MODEL", "fal-ai/flux-2")
-        payload = {"prompt": idea, "image_size": "landscape_4_3", "num_images": 1, "output_format": "png"}
-        media_kind, filename = "images", "task-worker-image.png"
-    elif kind == "song":
-        model = os.getenv("FAL_MUSIC_MODEL", "fal-ai/minimax-music/v2.5")
-        payload = {
-            "prompt": "Original Azerbaijani-language song about " + idea + ". Catchy melody, clear Azerbaijani vocals, polished studio production.",
-            "lyrics_optimizer": True,
-            "lyrics": "",
-            "is_instrumental": False,
-            "audio_setting": {"format": "mp3", "bitrate": "256000", "sample_rate": "44100"}
-        }
-        media_kind, filename = "audio", "task-worker-song.mp3"
-    else:
-        model = os.getenv("FAL_VIDEO_MODEL", "fal-ai/wan-25-preview/text-to-video")
-        style = "family-friendly colorful 3D cartoon animation" if kind == "cartoon" else "polished commercial product advertisement"
-        payload = {
-            "prompt": style + ". " + idea + ". Clear subject, coherent motion, cinematic camera, professional lighting, no subtitles, no watermark.",
-            "aspect_ratio": "16:9", "resolution": "720p", "duration": "5",
-            "enable_prompt_expansion": True, "enable_safety_checker": True
-        }
-        media_kind, filename = "video", "task-worker-video.mp4"
+def magichour_wait_for_project(project_type, project_id, timeout=300):
+    paths = {"video": "/video-projects/", "image": "/image-projects/", "audio": "/audio-projects/"}
+    if project_type not in paths:
+        raise RuntimeError("Naməlum media növü.")
+    time_mod = __import__("time")
+    deadline = time_mod.time() + timeout
+    while time_mod.time() < deadline:
+        result = magichour_request("GET", paths[project_type] + urllib.parse.quote(str(project_id)))
+        status = str(result.get("status", "")).lower()
+        if status == "complete":
+            downloads = result.get("downloads") or []
+            if isinstance(downloads, dict):
+                downloads = [downloads]
+            if not downloads and result.get("download"):
+                downloads = [result["download"]]
+            if downloads and isinstance(downloads[0], dict) and downloads[0].get("url"):
+                return downloads[0]["url"]
+            raise RuntimeError("Layihə tamamlandı, amma yükləmə linki yoxdur.")
+        if status in ("error", "canceled"):
+            err = result.get("error") or {}
+            message = err.get("message") if isinstance(err, dict) else str(err)
+            raise RuntimeError("Generasiya %s: %s" % (status, message or "səbəb göstərilməyib"))
+        time_mod.sleep(4)
+    raise TimeoutError("Generasiya hələ tamamlanmayıb. Təkrar sorğu göndərmədim.")
 
-    await update.message.reply_text("⏳ Süni intellekt media faylını hazırlayır. Bitən kimi bu Telegram çatına göndərəcəyəm.")
-    data = await asyncio.to_thread(fal_request, model, payload)
-    if media_kind == "images":
-        url = data.get("images", [{}])[0].get("url")
-    else:
-        url = data.get(media_kind, {}).get("url")
-    if not url:
-        raise RuntimeError("Generasiya xidməti fayl linki qaytarmadı.")
-    def download_media():
-        req = urllib.request.Request(url, headers={"User-Agent": "TaskWorkerAZ/1.0"})
-        with urllib.request.urlopen(req, timeout=90) as response:
-            content = response.read(49 * 1024 * 1024 + 1)
-        if len(content) > 49 * 1024 * 1024:
-            raise RuntimeError("Fayl Telegram göndərmə limitindən böyükdür.")
-        return content
-    content = await asyncio.to_thread(download_media)
+
+def magichour_download(url, filename):
+    req = urllib.request.Request(url, headers={"User-Agent": "TaskWorkerAZ/1.0"})
+    with urllib.request.urlopen(req, timeout=90) as response:
+        content = response.read(49 * 1024 * 1024 + 1)
+    if len(content) > 49 * 1024 * 1024:
+        raise RuntimeError("Fayl Telegram göndərmə limitindən böyükdür.")
     from io import BytesIO
     stream = BytesIO(content)
     stream.name = filename
-    if media_kind == "images":
+    return stream
+
+
+def create_and_send_media_sync(kind, idea):
+    magichour_free_account_check()
+    if kind in ("cartoon", "ad"):
+        style = "family-friendly colorful 3D cartoon animation" if kind == "cartoon" else "polished commercial product advertisement"
+        created = magichour_request("POST", "/text-to-video", {
+            "end_seconds": 5.0,
+            "style": {"prompt": style + ". " + idea + ". Coherent motion, cinematic camera, professional lighting, no subtitles, no watermark."},
+            "aspect_ratio": "16:9", "audio": False, "model": "ltx-2.5",
+            "name": "Task Worker AZ " + ("Cartoon" if kind == "cartoon" else "Advertisement"),
+            "resolution": "480p",
+        })
+        project_type, filename = "video", "task-worker-video.mp4"
+    elif kind == "image":
+        created = magichour_request("POST", "/ai-image-generator", {
+            "image_count": 1, "style": {"prompt": idea, "tool": "general"},
+            "aspect_ratio": "16:9", "model": "z-image-turbo",
+            "name": "Task Worker AZ Image", "resolution": "640px",
+        })
+        project_type, filename = "image", "task-worker-image.png"
+    else:
+        # The documented Magic Hour audio endpoint is speech/TTS, not music composition.
+        lyrics = ("Mövzu: " + idea + ". Yeni arzular, yeni ümidlər, hər gün irəli gedirik. "
+                  "Birlikdə güclüyük, xəyallarımıza çatırıq.")
+        voices = magichour_request("GET", "/voices?limit=20")
+        voice_list = voices.get("voices") or []
+        if not voice_list or not voice_list[0].get("id"):
+            raise RuntimeError("Magic Hour hesabında istifadə edilə bilən səs tapılmadı.")
+        created = magichour_request("POST", "/ai-voice-generator", {
+            "style": {"language": "auto", "prompt": lyrics, "speed": 1.0,
+                      "voice_name": voice_list[0]["id"]},
+            "name": "Task Worker AZ spoken lyrics",
+        })
+        project_type, filename = "audio", "task-worker-lyrics.wav"
+    project_id = created.get("id")
+    if not project_id:
+        raise RuntimeError("Magic Hour layihə ID-si qaytarmadı.")
+    url = magichour_wait_for_project(project_type, project_id)
+    return magichour_download(url, filename), project_type
+
+
+async def create_and_send_media(update, kind, idea):
+    await update.message.reply_text("⏳ Magic Hour pulsuz hesabını və kredit balansını yoxlayıram...")
+    stream, media_kind = await asyncio.to_thread(create_and_send_media_sync, kind, idea)
+    if media_kind == "image":
         await update.message.reply_photo(photo=stream, caption="🖼️ Hazır AI şəkli")
     elif media_kind == "video":
         await update.message.reply_video(video=stream, caption="🎬 Hazır AI videosu", supports_streaming=True)
     else:
-        await update.message.reply_audio(audio=stream, caption="🎵 Hazır AI mahnısı", title="Task Worker AZ")
+        await update.message.reply_audio(audio=stream, caption="🔊 AI səsləndirməsi (musiqili mahnı deyil)", title="Task Worker AZ")
 
 
 async def creative_request(update, context, kind):
@@ -912,7 +953,7 @@ async def creative_request(update, context, kind):
         await update.message.reply_text("Mövzunu da yaz. Nümunə: " + examples[kind])
         return
     idea = idea[:700]
-    if os.getenv("FAL_KEY", "").strip():
+    if os.getenv("MAGIC_HOUR_API_KEY", "").strip():
         try:
             await create_and_send_media(update, kind, idea)
         except Exception as exc:
@@ -936,7 +977,7 @@ async def creative_request(update, context, kind):
         fallback = ("🖼️ ŞƏKİL PROMPTU\nCreate a beautiful, high-quality illustration of " + idea +
                     ", vivid colors, detailed composition, cinematic soft lighting, family-friendly, no text, no watermark.")
     await update.message.reply_text(
-        fallback + "\n\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/MP3/PNG faylı üçün Railway-də FAL_KEY əlavə edilməlidir."
+        fallback + "\n\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/PNG və səsləndirmə faylı üçün Railway-də MAGIC_HOUR_API_KEY əlavə edilməlidir."
     )
 
 
@@ -960,17 +1001,15 @@ async def studio(update, context):
     if not await private_only(update):
         return
     await update.message.reply_text(
-        "🎨 TASK WORKER AZ — YARADICI STUDİO\n"
-        "/cartoon mövzu — cizgi filmi ssenarisi və səhnə planı\n"
-        "/ad məhsul — reklam çarxının ssenarisi\n"
-        "/song mövzu — orijinal mahnı sözləri\n"
-        "/image mövzu — şəkil generatoru üçün prompt\n\n"
-        "Vacib: hazırkı bot mətn, ssenari və prompt hazırlaya bilir. "
-        "MP4 video, şəkil faylı və musiqi audiosu yaratmaq üçün ayrıca generasiya xidməti/API və onun icazəli açarı lazımdır. "
-        "Media API: fal.ai. Railway-də FAL_KEY dəyişənini əlavə et; eyni açar şəkil, video və mahnı üçün işləyir. " 
-        "Standart modellər: fal-ai/flux-2 (PNG), fal-ai/wan-25-preview/text-to-video (MP4), fal-ai/minimax-music/v2.5 (MP3). " 
-        "İstəyə görə FAL_IMAGE_MODEL, FAL_VIDEO_MODEL və FAL_MUSIC_MODEL dəyişənləri ilə modelləri dəyişmək olar. " 
-        "Xidmət qoşulmayınca bot hazır media faylı yaratdığını iddia etmir."
+        "🎨 TASK WORKER AZ — YARADICI STUDİO\\n"
+        "/cartoon mövzu — 5 saniyəlik cizgi video\\n"
+        "/ad məhsul — 5 saniyəlik reklam videosu\\n"
+        "/song mövzu — mövzu üzrə səsli mətn (musiqili mahnı deyil)\\n"
+        "/image mövzu — PNG şəkil\\n\\n"
+        "Magic Hour API üçün Railway-də MAGIC_HOUR_API_KEY dəyişənini əlavə et. "
+        "Bot yalnız Free/Trial hesabı və müsbət pulsuz kredit balansını qəbul edir; ödənişli və naməlum planları bloklayır. "
+        "Kredit 0 olduqda yeni generasiya sorğusu göndərilmir. API-də musiqi bəstələmə endpoint-i təsdiqlənmədiyi üçün /song yalnız səsli mətn yaradır. "
+        "API açarını GitHub-a və ya bu söhbətə göndərmə."
     )
 
 
