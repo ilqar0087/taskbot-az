@@ -133,7 +133,7 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not owner_only(update): return
     await update.message.reply_text(
-        f"Rejim: {settings.trading_mode.upper()}\n"
+        f"Rejim: ictimai bazar analizi (sifariş yoxdur)\n"
         f"Avtomatik Testnet sifarişi: {'aktiv' if settings.auto_trade_testnet else 'bağlı'}\n"
         f"Spot skanı: {settings.spot_enabled}\nFutures skanı: {settings.futures_enabled}\n"
         f"Leverage həddi: 3x–{settings.max_leverage}x\n"
