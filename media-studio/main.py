@@ -277,8 +277,8 @@ async def media_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
                        ".mp4", ".mov", ".mkv", ".webm", ".avi", ".mpeg", ".mpg"}:
         await msg.reply_text("Bu fayl formatını tanımadım. Audio: MP3/WAV/FLAC/M4A/OGG; video: MP4/MOV/MKV/WEBM göndər.")
         return
-    if media.file_size and media.file_size > 45 * 1024 * 1024:
-        await msg.reply_text("Fayl 45 MB-dan böyükdür. Zəhmət olmasa daha kiçik fayl göndər.")
+    if media.file_size and media.file_size > 20 * 1024 * 1024:
+        await msg.reply_text("Fayl 20 MB-dan böyükdür. Zəhmət olmasa daha kiçik fayl göndər.")
         return
     tg_file = await context.bot.get_file(media.file_id)
     source = WORK / f"{chat_id}-source{suffix}"
