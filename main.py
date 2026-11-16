@@ -41,7 +41,7 @@ GITHUB_QUERIES = [
 ]
 HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
 AGENT_WORDS = ("agent allowed", "ai agent", "agent-only", "agent only", "autonomous agent")
-REWARD_RE = re.compile(r"(?:\$\\s?\\d[\\d,]*(?:\\.\\d{1,2})?|\\d[\\d,]*(?:\\.\\d{1,2})?\\s?(?:USDC|USD|ETH|SOL))", re.I)
+REWARD_RE = re.compile(r"(?:\$\s?\d[\d,]*(?:\.\d{1,2})?|\d[\d,]*(?:\.\d{1,2})?\s?(?:USDC|USD|ETH|SOL))", re.I)
 
 
 def connect():
@@ -87,7 +87,7 @@ def fetch_github_bounties():
                 found.append({
                     "source": "GitHub", "title": title[:240], "url": item["html_url"],
                     "reward": reward, "eligibility": eligibility,
-                    "summary": re.sub(r"\\s+", " ", body).strip()[:500],
+                    "summary": re.sub(r"\s+", " ", body).strip()[:500],
                     "updated": item.get("updated_at") or datetime.now(timezone.utc).isoformat(),
                 })
         except Exception as exc:
@@ -129,14 +129,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             log.exception("Owner notification failed")
     await update.message.reply_text(
-        "🤖 Task Worker AZ\\n\\n"
-        "/scan — açıq bounty tapşırıqlarını axtar\\n"
-        "/tasks — tapşırıq mənbələri\\n"
-        "/opportunities — tapılmış elanlar\\n"
-        "/view ID — elan təfərrüatı\\n"
-        "/done ID qeyd — işi tamamlandı kimi qeyd et\\n"
-        "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\\n"
-        "/balance — real gəlir\\n/history — tarixçə\\n/id — Telegram ID"
+        "🤖 Task Worker AZ\n\n"
+        "/scan — açıq bounty tapşırıqlarını axtar\n"
+        "/tasks — tapşırıq mənbələri\n"
+        "/opportunities — tapılmış elanlar\n"
+        "/view ID — elan təfərrüatı\n"
+        "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
+        "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
+        "/balance — real gəlir\n/history — tarixçə\n/id — Telegram ID"
     )
 
 
@@ -148,9 +148,9 @@ async def tasks(update, context):
     if not await private_only(update):
         return
     lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
-    lines += [f"\\n{i}. {name}\\n{note}\\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
-    lines.append("\\nBot yalnız açıq elanları tapır. Ölkə uyğunluğu, hesab tələbləri və ödəniş hər platformada ayrıca yoxlanmalıdır.")
-    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+    lines += [f"\n{i}. {name}\n{note}\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
+    lines.append("\nBot yalnız açıq elanları tapır. Ölkə uyğunluğu, hesab tələbləri və ödəniş hər platformada ayrıca yoxlanmalıdır.")
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
 async def scan(update, context):
@@ -176,9 +176,9 @@ async def opportunities(update, context):
         return
     lines = ["Tapılmış açıq elanlar:"]
     for row in rows:
-        lines.append(f"\\nID {row['id']}: {row['title']}\\nMükafat: {row['reward']}\\nİcazə: {row['eligibility']}\\n{row['url']}")
-    lines.append("\\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
-    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+        lines.append(f"\nID {row['id']}: {row['title']}\nMükafat: {row['reward']}\nİcazə: {row['eligibility']}\n{row['url']}")
+    lines.append("\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
 async def view(update, context):
@@ -193,9 +193,9 @@ async def view(update, context):
         await update.message.reply_text("Elan tapılmadı. /scan ilə yenilə.")
         return
     await update.message.reply_text(
-        f"{row['title']}\\nMükafat: {row['reward']}\\nİcazə: {row['eligibility']}\\n"
-        f"Yenilənib: {row['updated']}\\n{row['url']}\\n\\n"
-        f"Qısa təsvir: {row['summary'] or 'Təsvir yoxdur'}\\n\\n"
+        f"{row['title']}\nMükafat: {row['reward']}\nİcazə: {row['eligibility']}\n"
+        f"Yenilənib: {row['updated']}\n{row['url']}\n\n"
+        f"Qısa təsvir: {row['summary'] or 'Təsvir yoxdur'}\n\n"
         "İşə başlamazdan əvvəl qaydaları, AI istifadəsinə icazəni və ödəniş şərtlərini özün təsdiqlə.",
         disable_web_page_preview=True)
 
@@ -248,7 +248,7 @@ async def balance(update, context):
     with connect() as db:
         total = db.execute("SELECT COALESCE(SUM(cents),0) FROM income").fetchone()[0]
         count = db.execute("SELECT COUNT(*) FROM income").fetchone()[0]
-    await update.message.reply_text("Qeydə alınmış faktiki gəlir: $" + f"{total/100:.2f}" + f"\\nÖdəniş sayı: {count}")
+    await update.message.reply_text("Qeydə alınmış faktiki gəlir: $" + f"{total/100:.2f}" + f"\nÖdəniş sayı: {count}")
 
 
 async def history(update, context):
@@ -260,9 +260,9 @@ async def history(update, context):
     lines = ["Ödənişlər:"] + ["+$" + f"{r['cents']/100:.2f}" + f" — elan {r['task_id']} — {r['note']}" for r in rows]
     if not rows:
         lines.append("Hələ ödəniş yoxdur.")
-    lines.append("\\nTamamlanan iş qeydləri:")
+    lines.append("\nTamamlanan iş qeydləri:")
     lines += [f"• Elan {r['task_id']} — {r['note']}" for r in done_rows] or ["Hələ qeyd yoxdur."]
-    await update.message.reply_text("\\n".join(lines))
+    await update.message.reply_text("\n".join(lines))
 
 
 def main():
