@@ -957,7 +957,7 @@ async def creative_request(update, context, kind):
         try:
             await create_and_send_media(update, kind, idea)
         except Exception as exc:
-            log.exception("fal.ai media generation failed")
+            log.exception("Magic Hour media generation failed")
             await update.message.reply_text(
                 "⚠️ Media yaratmaq alınmadı: " + str(exc)[:350] +
                 "\nAçarı, fal.ai balansını və model icazəsini yoxla. Heç bir hazır fayl yaradılmış kimi göstərilmir."
