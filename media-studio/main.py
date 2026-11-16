@@ -41,6 +41,13 @@ LABELS = {
     "ad": "Reklam çarxı",
 }
 
+AI_MENU = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🎚 Vokal və alətləri ayır", callback_data="ai_stems")],
+    [InlineKeyboardButton("🧹 Səsi təmizlə (vokal)", callback_data="ai_clean")],
+    [InlineKeyboardButton("🎛 AI remiks / janr dəyiş", callback_data="ai_remix")],
+    [InlineKeyboardButton("🔄 Sadəcə formatı dəyiş", callback_data="audio_convert")],
+])
+
 FORMAT_MENU = InlineKeyboardMarkup([
     [InlineKeyboardButton("MP3", callback_data="fmt_mp3"), InlineKeyboardButton("WAV", callback_data="fmt_wav")],
     [InlineKeyboardButton("FLAC", callback_data="fmt_flac"), InlineKeyboardButton("M4A", callback_data="fmt_m4a")],
@@ -162,6 +169,64 @@ def make_video(chat_id, poster_path, audio_path):
     return out
 
 
+def fal_process(source_path, action, prompt=""):
+    """Run real hosted audio AI models. Requires FAL_KEY configured server-side."""
+    if not os.getenv("FAL_KEY"):
+        raise RuntimeError("FAL_KEY yoxdur. Railway Variables bölməsinə FAL_KEY əlavə edilməlidir.")
+    import fal_client
+    import urllib.request
+
+    audio_url = fal_client.upload_file(str(source_path))
+    if action == "stems":
+        result = fal_client.subscribe(
+            "fal-ai/demucs",
+            arguments={"audio_url": audio_url, "model": "htdemucs_6s",
+                       "stems": ["vocals", "drums", "bass", "other", "guitar", "piano"],
+                       "output_format": "mp3"},
+            client_timeout=1800,
+        )
+        files = []
+        for key in ("vocals", "drums", "bass", "other", "guitar", "piano"):
+            item = result.get(key)
+            if isinstance(item, dict) and item.get("url"):
+                out = WORK / f"{Path(source_path).stem}-{key}.mp3"
+                urllib.request.urlretrieve(item["url"], out)
+                files.append((key, out))
+        if not files:
+            raise RuntimeError("AI modeli stem fayllarını qaytarmadı.")
+        return files
+
+    if action == "clean":
+        result = fal_client.subscribe(
+            "fal-ai/elevenlabs/audio-isolation",
+            arguments={"audio_url": audio_url},
+            client_timeout=900,
+        )
+        item = result.get("audio") or {}
+        url = item.get("url")
+        if not url:
+            raise RuntimeError("Təmizlənmiş audio faylı qaytarılmadı.")
+        out = WORK / f"{Path(source_path).stem}-clean.mp3"
+        urllib.request.urlretrieve(url, out)
+        return [("clean", out)]
+
+    if action == "remix":
+        result = fal_client.subscribe(
+            "fal-ai/stable-audio-3/small/music/audio-to-audio",
+            arguments={"audio_url": audio_url, "prompt": prompt},
+            client_timeout=1800,
+        )
+        item = result.get("audio") or {}
+        url = item.get("url")
+        if not url:
+            raise RuntimeError("AI remiks faylı qaytarılmadı.")
+        suffix = ".mp3" if "mp3" in (item.get("content_type") or "") else ".wav"
+        out = WORK / f"{Path(source_path).stem}-ai-remix{suffix}"
+        urllib.request.urlretrieve(url, out)
+        return [("remix", out)]
+    raise ValueError("Naməlum AI əməliyyatı.")
+
+
 def convert_media(chat_id, source_path, target_format):
     """Convert an uploaded audio/video file with FFmpeg; no AI enhancement is implied."""
     source = Path(source_path)
@@ -270,7 +335,37 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     if q.data == "audio_tools":
-        await q.message.reply_text("Audio və ya video faylını göndər. Sonra çıxış formatını seçəcəksən: MP3, WAV, FLAC, M4A, MP4 və ya MOV.")
+        await q.message.reply_text("Audio və ya video faylını göndər. Sonra AI emalı və ya format çevirməni seç.")
+        return
+    if q.data == "audio_convert":
+        await q.message.reply_text("Çıxış formatını seç:", reply_markup=FORMAT_MENU)
+        return
+    if q.data in ("ai_stems", "ai_clean", "ai_remix"):
+        chat_id = q.message.chat_id
+        session = SESSIONS.get(chat_id, {})
+        if not session.get("source"):
+            await q.message.reply_text("Əvvəl audio faylını göndər.")
+            return
+        if not os.getenv("FAL_KEY"):
+            await q.message.reply_text("AI mühərrikinin kodu qoşulub, amma FAL_KEY açarı hələ Railway-də yoxdur. Açarı əlavə etdikdən sonra bu funksiyalar işləyəcək.")
+            return
+        if q.data == "ai_remix":
+            session["mode"] = "ai_remix_prompt"
+            await q.message.reply_text("Remiks üslubunu yaz: məsələn, Deep House, Afro House, Techno, Pop. Yalnız özünə aid və ya remiks icazən olan audio fayllardan istifadə et.")
+            return
+        action = "stems" if q.data == "ai_stems" else "clean"
+        await q.message.reply_text("⏳ AI audio emalı başladı. Faylın uzunluğundan asılı olaraq bir neçə dəqiqə çəkə bilər...")
+        try:
+            outputs = await asyncio.to_thread(fal_process, session["source"], action)
+            for label, out_path in outputs:
+                with open(out_path, "rb") as stream:
+                    await q.message.reply_document(document=stream, filename=out_path.name,
+                                                   caption={"vocals":"Vokal","drums":"Zərb alətləri","bass":"Bass","other":"Digər alətlər","guitar":"Gitara","piano":"Piano","clean":"Təmizlənmiş səs"}.get(label, label))
+            SESSIONS.pop(chat_id, None)
+            await q.message.reply_text("✅ AI emalı tamamlandı.", reply_markup=MENU)
+        except Exception as exc:
+            log.exception("AI audio processing failed")
+            await q.message.reply_text(f"AI emalı alınmadı: {str(exc)[:350]}")
         return
     if q.data.startswith("fmt_"):
         chat_id = q.message.chat_id
@@ -326,6 +421,22 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     mode = session["mode"]
     photo = session.get("photo")
+    if mode == "ai_remix_prompt":
+        if not os.getenv("FAL_KEY"):
+            await update.message.reply_text("FAL_KEY əlavə edilməyib. Railway Variables bölməsinə əlavə olunmalıdır.")
+            return
+        await update.message.reply_text("⏳ AI remiks hazırlanır. Bu proses bir neçə dəqiqə çəkə bilər...")
+        try:
+            outputs = await asyncio.to_thread(fal_process, session["source"], "remix", prompt)
+            for label, out_path in outputs:
+                with open(out_path, "rb") as stream:
+                    await update.message.reply_audio(audio=stream, title="AI Media Studio — AI Remix")
+            SESSIONS.pop(chat_id, None)
+            await update.message.reply_text("✅ AI remiks hazırdır.", reply_markup=MENU)
+        except Exception as exc:
+            log.exception("AI remix failed")
+            await update.message.reply_text(f"AI remiks alınmadı: {str(exc)[:350]}")
+        return
     await update.message.reply_text("⏳ Hazırlayıram, bir az gözlə...")
     try:
         if mode == "music":
