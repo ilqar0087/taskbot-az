@@ -454,10 +454,9 @@ async def azjobs(update, context):
         return
     lines = ["🇦🇿 Azərbaycan üçün iş platformaları — telefon uyğunluğu və ödəniş statusu ayrıca göstərilir:"]
     for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
-        lines.append(f"\\n{i}. {lead['name']}\\nStatus: {lead['status']}\\nTələblər: {lead['details']}\\n{lead['url']}")
-    lines.append("\\nUSD ödəniş üçün Kapital Bank-da ayrıca USD hesabı lazım ola bilər. Jwuma USD bank köçürməsi göstərir; digər platformalarda payout ölkə və hesab üzrə təsdiqlənməlidir. Heç bir sayta iş almaq üçün depozit ödəmə.")
-    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
-
+        lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nTələblər: {lead['details']}\n{lead['url']}")
+    lines.append("\nUSD ödəniş üçün Kapital Bank-da ayrıca USD hesabı lazım ola bilər. Jwuma USD bank köçürməsi göstərir; digər platformalarda payout ölkə və hesab üzrə təsdiqlənməlidir. Heç bir sayta iş almaq üçün depozit ödəmə.")
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 async def faucet(update, context):
     if not await private_only(update):
