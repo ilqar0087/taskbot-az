@@ -1,8 +1,8 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 from config import Settings
 from market import make_exchange, get_snapshot
@@ -15,8 +15,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("ai-binance-trader")
 settings = Settings()
 PAUSED = False
+APP_MODE = "demo"
 LAST_SCAN = "Hələ skan edilməyib"
 LAST_EARN_SCAN = None
+
+
+def mode_keyboard():
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(("✅ " if APP_MODE == "demo" else "") + "🧪 DEMO", callback_data="binance_mode_demo"),
+        InlineKeyboardButton(("✅ " if APP_MODE == "real" else "") + "🚀 REAL", callback_data="binance_mode_real"),
+    ]])
+
 
 def owner_only(update: Update) -> bool:
     return bool(settings.owner_id) and str(update.effective_user.id) == settings.owner_id
@@ -41,7 +50,7 @@ def fmt_signal(symbol, market, s, approved, note):
         f"Leverage: {leverage_text}\n"
         f"Risk yoxlaması: {'KEÇDİ' if approved else 'İMTİNA'}\n"
         f"Səbəb: {note}\n"
-        "Qeyd: Bu versiya TESTNET/analiz üçündür; real ticarət bağlıdır."
+        f"Qeyd: {'DEMO siqnalıdır; sifariş göndərilmir.' if APP_MODE == 'demo' else 'REAL bazar siqnalıdır; real sifariş mühərriki hələ qoşulmayıb.'}"
     )
 
 def scan_market(symbol: str, futures: bool):
@@ -119,10 +128,32 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Bu bot şəxsi idarəetmə üçündür. Sahib hesabı ilə daxil olun.")
         return
     await update.message.reply_text(
-        "🤖 AI Binance Trader — canlı bazar məlumatları ilə analiz rejimi\n"
+        "🤖 AI Binance Trader\n"
+        f"Seçilmiş rejim: {'DEMO' if APP_MODE == 'demo' else 'REAL bazar siqnalları'}\n"
         "/scan — indi bazarı yoxla\n/earn — Earn və bonusları yoxla\n/status — vəziyyət\n/history — son siqnallar\n/pause — skanı dayandır\n/resume — skanı davam etdir\n\n"
-        "Bazar məlumatı Binance-in açıq əsas şəbəkə API-sindən oxunur; sifariş açmaq və pul çıxarmaq funksiyası bu versiyada yoxdur."
+        "DEMO: siqnallar sınaq rejimində göstərilir. REAL: canlı Binance bazar məlumatları və siqnallar. "
+        "Hər iki rejimdə real sifariş açmaq hazırda bağlıdır; sifariş mühərriki və API təhlükəsizlik yoxlamaları hələ qoşulmayıb.",
+        reply_markup=mode_keyboard()
     )
+
+async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global APP_MODE
+    query = update.callback_query
+    await query.answer()
+    if not owner_only(update):
+        await query.message.reply_text("Bu düyməni yalnız bot sahibi dəyişə bilər.")
+        return
+    if query.data == "binance_mode_demo":
+        APP_MODE = "demo"
+        message = "🧪 DEMO rejimi aktivdir. Siqnallar sınaq rejimində göstəriləcək; sifariş yoxdur."
+    elif query.data == "binance_mode_real":
+        APP_MODE = "real"
+        message = ("🚀 REAL bazar rejimi aktivdir. Siqnallar canlı Binance bazar məlumatlarından gəlir. "
+                   "Diqqət: bu, real ticarət deyil — sifariş mühərriki hələ qoşulmayıb.")
+    else:
+        return
+    await query.message.reply_text(message, reply_markup=mode_keyboard())
+
 
 async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not owner_only(update): return
@@ -133,7 +164,7 @@ async def scan_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not owner_only(update): return
     await update.message.reply_text(
-        f"Rejim: ictimai bazar analizi (sifariş yoxdur)\n"
+        f"Rejim: {APP_MODE.upper()} | canlı ictimai bazar məlumatı\n"
         f"Avtomatik Testnet sifarişi: {'aktiv' if settings.auto_trade_testnet else 'bağlı'}\n"
         f"Spot skanı: {settings.spot_enabled}\nFutures skanı: {settings.futures_enabled}\n"
         f"Leverage həddi: 3x–{settings.max_leverage}x\n"
@@ -192,6 +223,7 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN dəyişəni təyin edilməyib.")
     app = Application.builder().token(settings.telegram_token).post_init(post_init).build()
     app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CallbackQueryHandler(mode_callback, pattern=r"^binance_mode_"))
     app.add_handler(CommandHandler("scan", scan_cmd))
     app.add_handler(CommandHandler("earn", earn_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
