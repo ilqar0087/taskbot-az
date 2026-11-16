@@ -575,6 +575,19 @@ async def azjobs(update, context):
     lines.append("\nMicroworker.app-də əvvəl aktiv tapşırıqları və Azərbaycan hesabına payout uyğunluğunu yoxla. Sayt USDT/USDC BEP20 minimum $5 çıxarışını bildirir, lakin statistikası kiçikdir. Tapşırıq və qazanc zəmanətli deyil. Heç bir sayta iş almaq üçün depozit ödəmə.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
+async def mobile(update, context):
+    if not await private_only(update):
+        return
+    selected = ("Microworker.app", "Jwuma / Corpshore", "Andovar")
+    lines = ["📱 PRIORITET MOBİL PLATFORMALAR", "Bot yalnız bu 3 mənbəni əsas prioritet kimi izləyir:"]
+    for lead in AZERBAIJAN_LEADS:
+        if not lead["name"].startswith(selected):
+            continue
+        lines.append(f"\n{lead['name']}\nStatus: {lead['status']}\n{lead['details']}\n{lead['url']}")
+    lines.append("\nQeyd: bu siyahı aktiv tapşırıq zəmanəti deyil. Hesabda açıq iş, cihaz tələbi və payout təsdiqlənməlidir. Bot sənin hesabına daxil olmur və insan təsdiqi tələb edən işi avtomatik göndərmir.")
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+
+
 async def faucet(update, context):
     if not await private_only(update):
         return
@@ -750,7 +763,7 @@ def main():
     app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
         ("start", start), ("id", myid), ("real", real_mode), ("demo", demo_mode), ("status", status),
-        ("tasks", tasks), ("azjobs", azjobs), ("scan", scan),
+        ("tasks", tasks), ("azjobs", azjobs), ("mobile", mobile), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
