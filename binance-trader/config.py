@@ -31,7 +31,7 @@ class Settings:
     def validate(self) -> None:
         if self.trading_mode != "testnet":
             raise RuntimeError("Only Binance TESTNET mode is permitted in this build.")
-        if self.auto_trade_testnet and not (self.api_key and self.api_secret):
-            raise RuntimeError("AUTO_TRADE_TESTNET requires testnet API credentials.")
+        if self.auto_trade_testnet:
+            raise RuntimeError("Order execution is not implemented in this release; keep AUTO_TRADE_TESTNET=false.")
         if self.max_leverage > 10:
             raise RuntimeError("Leverage above 10x is not permitted.")
