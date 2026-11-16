@@ -4,7 +4,7 @@ Private Telegram-controlled Binance market scanner. The initial release is **TES
 
 ## Included
 - Spot and USDT-M Futures market scans
-- 15m / 1h / 4h trend and momentum voting
+- 15m / 1h / 4h trade analysis plus 1d / 1w long-horizon opportunity scan
 - EMA, RSI, MACD momentum, ATR volatility and volume checks
 - Order-book imbalance, spread, funding rate and open-interest snapshot where supported
 - Pre-trade risk gate: confidence threshold, risk/reward, position sizing, daily loss limit
@@ -16,7 +16,7 @@ Private Telegram-controlled Binance market scanner. The initial release is **TES
 ## Safety limits
 - `TRADING_MODE` must remain `testnet`; the application refuses any other mode.
 - `AUTO_TRADE_TESTNET=false` by default. No orders are placed in this initial build.
-- The scanner uses a placeholder $100 equity for risk-sizing examples until a verified TESTNET balance adapter is added.
+- Risk sizing is not approved until a verified account equity is configured; no fictional balance is assumed.
 - Spot and Futures signals are analytical alerts. This release does not yet place live or testnet orders.
 - It does not promise profits or loss-free trading.
 - Binance Earn, Launchpool, Megadrop and bonus campaigns are not auto-subscribed. The first version does not use coupons; campaign discovery needs a separate account/region eligibility integration.
