@@ -23,15 +23,12 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("task-worker")
 
 SITES = [
-    ("Microworkers", "https://www.microworkers.com/", "Kiçik onlayn tapşırıqlar. Ödəniş üsulu, minimum çıxarış və KYC-ni hesabda yoxla; tapşırıq sayı ölkəyə görə dəyişir."),
+    ("Microworker.app", "https://microworker.app/", "Mikrotapşırıqlar; sayt USDT/USDC-ni BNB Smart Chain (BEP20) ilə ödədiyini, minimum çıxarışın $5 olduğunu bildirir. Platformanın öz statistikası kiçikdir; əvvəl real tapşırıq, hesab uyğunluğu və payout şərtlərini yoxla. Depozit etmə."),
     ("Mindrift", "https://www.mindrift.ai/", "AI mətn qiymətləndirmə və təlim layihələri. Azərbaycan üzrə qəbul və ödəniş üsulunu əvvəlcədən təsdiqlə."),
     ("Clickworker", "https://www.clickworker.com/clickworker/", "Mikrotapşırıqlar və AI data işi. Azərbaycan qeydiyyatı və ödəniş üsulu Payment details bölməsində təsdiqlənməlidir."),
     ("CrowdGen by Appen", "https://crowdgen.com/", "AI data layihələri. Layihənin Azərbaycana açıq olmasını və ödəniş metodunu hər elanda yoxla."),
     ("Jwuma / Corpshore", "https://platform.corpshore.ai/azerbaijan", "Azərbaycan üçün AI data, mətn, tərcümə və səs tapşırıqları. USD bank hesabına köçürmə göstərilir; telefonda işləmə və konkret layihə mövcudluğunu əvvəlcədən təsdiqlə."),
-    ("Crowtado", "https://www.crowtado.com/en", "Telefonla foto, video və səs tapşırıqları. Azərbaycan üzrə tapşırıq və çıxarış metodunu hesabda yoxla; gəlir zəmanətli deyil."),
-    ("Wake", "https://wake.inc/contribute/", "Android/iOS ilə fiziki işlərin videosunu çəkib AI təliminə töhfə ver. Azərbaycan ödəniş ölkələri siyahısındadır; tapşırıq mövcudluğu tətbiqdə görünür. Rəsmi başlanğıc tarif $6/təsdiqlənmiş saatdır."),
     ("OneForma — Azeri Translation Quality Rater", "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/", "Azərbaycan üçün açıq dil layihəsi; kompüter və gündə 2 saat tələb olunur, telefonla işləmək uyğun deyil."),
-    ("KLKT / CNTXT AI", "https://play.google.com/store/apps/details?id=com.cntxt.cntxtai.data.services", "Android tətbiqində foto, video və audio data tapşırıqları. Azərbaycan üçün payout metodunu və aktiv tapşırıqları tətbiqdə təsdiqlə."),
     ("Andovar", "https://careers.andovar.com/freelance-and-work-from-home-opportunities/", "Dil və səs yazısı layihələri. Konkret Azərbaycan layihəsinin açıq olub-olmadığını yoxla; əvvəlki səs yazısı elanı aktiv olmaya bilər."),
     ("Work.az", "https://work.az/", "Azərbaycan üzrə yerli işlər. Müştəri ilə qiyməti, son tarixi və ödənişi yazılı razılaşdır."),
     ("Upwork", "https://www.upwork.com/", "Beynəlxalq freelance layihələr. Komissiya və Azərbaycanda işləyən çıxarış üsulunu əvvəlcədən yoxla."),
@@ -51,28 +48,10 @@ AZERBAIJAN_LEADS = [
         "details": "Mətn annotasiyası, tərcümə yoxlaması, QA və səs/məlumat toplama. Ödəniş həftəlik batch kimi göstərilir; Azərbaycan üçün USD bank köçürməsi, 2% komissiya (minimum $10, maksimum $30). USD hesab tələb oluna bilər. Telefon uyğunluğu və real tapşırıq mövcudluğu qeydiyyatdan əvvəl təsdiqlənməlidir."
     },
     {
-        "name": "Wake — telefonla video çəkilişi (Android/iOS)",
-        "url": "https://wake.inc/contribute/",
-        "status": "Azərbaycan rəsmi ödəniş ölkələri siyahısındadır. Tətbiqdə görünən tapşırıqlar ölkə və çəkiliş şərtlərinə görə dəyişir.",
-        "details": "Əllər sərbəst çəkilişlə yemək hazırlamaq, yığmaq, təmir etmək və gündəlik fiziki işləri videoya çəkmək. Rəsmi sayt başlanğıc tarifi $6/təsdiqlənmiş saat göstərir; bu, zəmanətli qazanc və ya daimi tapşırıq demək deyil. Tətbiqdə Azərbaycan üçün açıq tapşırığı və ödəniş şərtlərini yoxla."
-    },
-    {
         "name": "OneForma — Azeri Translation Quality Rater (kompüter tələb edir)",
         "url": "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/",
         "status": "Axtarış zamanı Azerbaijan üçün açıq və müraciət qəbul edən layihə kimi göstərilirdi; status dəyişə bilər.",
         "details": "Azeri (Latin) ↔ English tərcümə keyfiyyətinin yoxlanması; ödəniş təsdiqlənmiş material başınadır, gündə təxminən 2 saat. Layihə kompüter və sabit internet tələb edir, yalnız telefonla işləmək üçün uyğun deyil."
-    },
-    {
-        "name": "Crowtado — telefonla foto, video və audio tapşırıqları",
-        "url": "https://www.crowtado.com/en",
-        "status": "Platforma və mobil tapşırıqlar mövcuddur; Azərbaycan üzrə tapşırıq və pul çıxarışı ayrıca yoxlanmalıdır.",
-        "details": "Yalnız tətbiqdə görünən aktiv tapşırığa və hesabda göstərilən payout şərtlərinə əsasən işə başla. Ödəniş və ölkə uyğunluğu təsdiqlənmədən gəlir hesab etmə."
-    },
-    {
-        "name": "KLKT / CNTXT AI — Android data tapşırıqları",
-        "url": "https://play.google.com/store/apps/details?id=com.cntxt.cntxtai.data.services",
-        "status": "Android tətbiqi mövcuddur; Azərbaycan üçün aktiv layihə və payout təsdiqi tələb olunur.",
-        "details": "Foto, video və audio məlumat toplama tapşırıqları. Ödəniş metodları ölkəyə görə dəyişə bilər; tətbiqdə Azərbaycan hesabı üçün çıxarış üsulunu yoxla."
     },
     {
         "name": "Andovar — dil və səs yazısı layihələri",
@@ -410,10 +389,7 @@ def fetch_remote_job_feeds():
 def fetch_mobile_platform_leads():
     """Show real platform entry points separately from verified job vacancies."""
     selected = (
-        "Jwuma / Corpshore — Azərbaycan AI tapşırıqları",
-        "Wake — telefonla video çəkilişi (Android/iOS)",
-        "Crowtado — telefonla foto, video və audio tapşırıqları",
-        "KLKT / CNTXT AI — Android data tapşırıqları",
+        "Microworker.app — USDT/USDC BEP20 mikrotapşırıqları",
     )
     found = []
     for lead in AZERBAIJAN_LEADS:
@@ -571,7 +547,7 @@ async def tasks(update, context):
         return
     lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
     lines += [f"\n{i}. {name}\n{note}\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
-    lines.append("\nAzərbaycanda qeydiyyat və pul çıxarışı hər hesabda fərqli ola bilər. İşə başlamazdan əvvəl payout metodunu yoxla. İş almaq üçün heç bir sayta depozit ödəmə.")
+    lines.append("\nAzərbaycanda qeydiyyat və pul çıxarışı hər hesabda fərqli ola bilər. Microworker.app USDT/USDC BEP20 payout göstərir; əvvəl hesabda təsdiqlə. İş almaq üçün heç bir sayta depozit ödəmə.")
     lines.append("Bot GitHub-da təsdiqlənən nağd bounty-ləri, Jobicy və Remote OK uzaqdan iş elanlarını axtarır. Elanlar mənbəyə keçidlə göstərilir; müraciət və işi görmək insan təsdiqi tələb edir.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
@@ -582,7 +558,7 @@ async def azjobs(update, context):
     lines = ["🇦🇿 Azərbaycan üçün iş platformaları — telefon uyğunluğu və ödəniş statusu ayrıca göstərilir:"]
     for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
         lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nTələblər: {lead['details']}\n{lead['url']}")
-    lines.append("\nƏvvəl Wake və Crowtado-da telefonla açıq tapşırıqları yoxla. Wake Azərbaycanı ödəniş ölkəsi kimi göstərir, amma tapşırıq sayı zəmanətli deyil. OneForma layihəsi kompüter tələb edir. Jwuma-da USD köçürmə şərtlərini, digər platformalarda payout metodunu hesabda təsdiqlə. Heç bir sayta iş almaq üçün depozit ödəmə.")
+    lines.append("\nMicroworker.app-də əvvəl aktiv tapşırıqları və Azərbaycan hesabına payout uyğunluğunu yoxla. Sayt USDT/USDC BEP20 minimum $5 çıxarışını bildirir, lakin statistikası kiçikdir. Tapşırıq və qazanc zəmanətli deyil. Heç bir sayta iş almaq üçün depozit ödəmə.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 async def faucet(update, context):
