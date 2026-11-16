@@ -924,19 +924,19 @@ async def creative_request(update, context, kind):
         return
 
     if kind == "cartoon":
-        fallback = ("🎬 CİZGİ FİLMİ SSENARİSİ\\nMövzu: " + idea +
-                    "\\n1. Giriş: qəhrəman sirli hadisə ilə qarşılaşır.\\n2. Macəra: yeni dost tapır və maneəni aşır.\\n3. Həll: ağıllı qərarla problemi həll edir.\\n4. Final: dostluq və cəsarət mesajı.")
+        fallback = ("🎬 CİZGİ FİLMİ SSENARİSİ\nMövzu: " + idea +
+                    "\n1. Giriş: qəhrəman sirli hadisə ilə qarşılaşır.\n2. Macəra: yeni dost tapır və maneəni aşır.\n3. Həll: ağıllı qərarla problemi həll edir.\n4. Final: dostluq və cəsarət mesajı.")
     elif kind == "ad":
-        fallback = ("📢 REKLAM SSENARİSİ\\nMəhsul: " + idea +
-                    "\\n0–3 san: diqqətçəkən giriş.\\n3–8 san: məhsulu göstər.\\n8–15 san: üstünlükləri dürüst təqdim et.\\n15–20 san: əlaqə/alış çağırışı.")
+        fallback = ("📢 REKLAM SSENARİSİ\nMəhsul: " + idea +
+                    "\n0–3 san: diqqətçəkən giriş.\n3–8 san: məhsulu göstər.\n8–15 san: üstünlükləri dürüst təqdim et.\n15–20 san: əlaqə/alış çağırışı.")
     elif kind == "song":
-        fallback = ("🎵 MAHNI MƏTNİ\\nMövzu: " + idea +
-                    "\\n[Verse] Yeni səhər, yeni ümid,\\nArzularım mənimlədir.\\n[Chorus] Gəl, birlikdə oxuyaq,\\nSevincimizi paylaşaq!")
+        fallback = ("🎵 MAHNI MƏTNİ\nMövzu: " + idea +
+                    "\n[Verse] Yeni səhər, yeni ümid,\nArzularım mənimlədir.\n[Chorus] Gəl, birlikdə oxuyaq,\nSevincimizi paylaşaq!")
     else:
-        fallback = ("🖼️ ŞƏKİL PROMPTU\\nCreate a beautiful, high-quality illustration of " + idea +
+        fallback = ("🖼️ ŞƏKİL PROMPTU\nCreate a beautiful, high-quality illustration of " + idea +
                     ", vivid colors, detailed composition, cinematic soft lighting, family-friendly, no text, no watermark.")
     await update.message.reply_text(
-        fallback + "\\n\\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/MP3/PNG faylı üçün Railway-də FAL_KEY əlavə edilməlidir."
+        fallback + "\n\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/MP3/PNG faylı üçün Railway-də FAL_KEY əlavə edilməlidir."
     )
 
 
@@ -967,7 +967,10 @@ async def studio(update, context):
         "/image mövzu — şəkil generatoru üçün prompt\n\n"
         "Vacib: hazırkı bot mətn, ssenari və prompt hazırlaya bilir. "
         "MP4 video, şəkil faylı və musiqi audiosu yaratmaq üçün ayrıca generasiya xidməti/API və onun icazəli açarı lazımdır. "
-        "Bu xidmət qoşulmayınca bot hazır media faylı yaratdığını iddia etmir."
+        "Media API: fal.ai. Railway-də FAL_KEY dəyişənini əlavə et; eyni açar şəkil, video və mahnı üçün işləyir. " 
+        "Standart modellər: fal-ai/flux-2 (PNG), fal-ai/wan-25-preview/text-to-video (MP4), fal-ai/minimax-music/v2.5 (MP3). " 
+        "İstəyə görə FAL_IMAGE_MODEL, FAL_VIDEO_MODEL və FAL_MUSIC_MODEL dəyişənləri ilə modelləri dəyişmək olar. " 
+        "Xidmət qoşulmayınca bot hazır media faylı yaratdığını iddia etmir."
     )
 
 
