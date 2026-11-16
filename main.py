@@ -97,14 +97,19 @@ def fetch_github_bounties():
 
 
 def save_opportunities(items):
+    new_items = []
     with connect() as db:
+        known = {row[0] for row in db.execute("SELECT url FROM opportunities")}
         for item in items:
+            if item["url"] not in known:
+                new_items.append(item)
             db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated)
               VALUES(?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET
               title=excluded.title,reward=excluded.reward,eligibility=excluded.eligibility,
               summary=excluded.summary,updated=excluded.updated""",
               (item["source"], item["title"], item["url"], item["reward"],
                item["eligibility"], item["summary"], item["updated"]))
+    return new_items
 
 
 async def private_only(update):
@@ -112,6 +117,25 @@ async def private_only(update):
         await update.effective_message.reply_text("Təhlükəsizlik üçün bot yalnız şəxsi çatda işləyir.")
         return False
     return True
+
+
+async def scheduled_scan(app):
+    while True:
+        try:
+            items = await asyncio.to_thread(fetch_github_bounties)
+            new_items = await asyncio.to_thread(save_opportunities, items)
+            if OWNER and new_items:
+                lines = ["🆕 Yeni açıq bounty elanları:"]
+                for item in new_items[:8]:
+                    lines.append(f"\\n• {item['title']}\\n{item['reward']} | {item['eligibility']}\\n{item['url']}")
+                await app.bot.send_message(chat_id=int(OWNER), text="\\n".join(lines), disable_web_page_preview=True)
+        except Exception:
+            log.exception("Scheduled task discovery failed")
+        await asyncio.sleep(6 * 60 * 60)
+
+
+async def post_init(app):
+    app.create_task(scheduled_scan(app))
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -268,7 +292,7 @@ async def history(update, context):
 def main():
     if not TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
-    app = Application.builder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).post_init(post_init).build()
     for name, handler in [
         ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
         ("opportunities", opportunities), ("view", view), ("done", done),
