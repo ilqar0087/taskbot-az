@@ -17,6 +17,9 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or os.getenv("BOT_TOKEN", ""
 OWNER = os.getenv("OWNER_TELEGRAM_ID", "")
 DB = os.getenv("DATABASE_PATH", "/data/taskbot.sqlite3")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# Avoid logging HTTP URLs that contain Telegram bot API tokens.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("task-worker")
 
 SITES = [
@@ -216,7 +219,17 @@ async def scheduled_scan(app):
 
 
 async def post_init(app):
-    app.create_task(scheduled_scan(app))
+    app.bot_data["scanner_task"] = asyncio.create_task(scheduled_scan(app))
+
+
+async def post_shutdown(app):
+    task = app.bot_data.get("scanner_task")
+    if task and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -243,7 +256,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/view ID — elan təfərrüatı\n"
         "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
         "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
-        "/balance — real gəlir\n/history — tarixçə\n/id — Telegram ID\n\n"
+        "/balance — real gəlir\n/history — tarixçə\n/faucet — FaucetPay məlumatı\n/id — Telegram ID\n\n"
         "DEMO: sınaq və elan baxışı. REAL: cari açıq elanlar; müraciət və işi tamamlamaq üçün sahib təsdiqi tələb olunur.",
         reply_markup=mode_keyboard(mode)
     )
@@ -406,7 +419,7 @@ async def history(update, context):
 def main():
     if not TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
-    app = Application.builder().token(TOKEN).post_init(post_init).build()
+    app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
         ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("done", done),
