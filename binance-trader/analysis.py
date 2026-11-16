@@ -35,6 +35,17 @@ def atr(rows, period=14):
         trs.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
     return sum(trs[-period:]) / period
 
+def ema_series(values, period):
+    if len(values) < period:
+        return []
+    alpha = 2 / (period + 1)
+    current = sum(values[:period]) / period
+    result = [None] * (period - 1) + [current]
+    for value in values[period:]:
+        current = value * alpha + current * (1 - alpha)
+        result.append(current)
+    return result
+
 def timeframe_vote(rows):
     closes = [float(x[4]) for x in rows]
     volumes = [float(x[5]) for x in rows]
@@ -42,9 +53,10 @@ def timeframe_vote(rows):
     rv = rsi(closes)
     if not e20 or not e50 or rv is None:
         return 0, {}
-    macd_fast, macd_slow = ema(closes, 12), ema(closes, 26)
-    macd_signal = ema(closes[-40:], 9) if len(closes) >= 40 else None
-    macd_hist = (macd_fast - macd_slow - macd_signal) if macd_signal is not None else 0
+    fast_line, slow_line = ema_series(closes, 12), ema_series(closes, 26)
+    macd_line = [f - s for f, s in zip(fast_line, slow_line) if f is not None and s is not None]
+    macd_signal = ema(macd_line, 9) if macd_line else None
+    macd_hist = (macd_line[-1] - macd_signal) if macd_signal is not None else 0
     vol_base = sum(volumes[-21:-1]) / max(1, len(volumes[-21:-1]))
     vol_ratio = volumes[-1] / vol_base if vol_base else 1
     vote = 0
