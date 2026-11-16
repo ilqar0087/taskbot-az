@@ -423,7 +423,7 @@ def fetch_mobile_platform_leads():
             "source": "Platforma",
             "title": lead["name"],
             "url": lead["url"],
-            "reward": "Ödəniş: hesabda və aktiv tapşırıqda yoxlanmalıdır",
+            "reward": "Hesabda və aktiv tapşırıqda yoxlanmalıdır",
             "eligibility": "PLATFORM_LEAD — Azərbaycan üzrə qəbul, aktiv tapşırıq və payout təsdiqlənməlidir",
             "summary": lead["status"] + " " + lead["details"],
             "updated": datetime.now(timezone.utc).isoformat(),
