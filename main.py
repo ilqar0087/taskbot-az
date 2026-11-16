@@ -805,6 +805,99 @@ async def history(update, context):
 
 
 
+
+def fal_request(model, payload):
+    """Submit a fal.ai job, wait for completion, and return its JSON result."""
+    api_key = os.getenv("FAL_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("FAL_KEY açarı Railway dəyişənlərində yoxdur.")
+    base = "https://queue.fal.run/" + model
+    headers = {"Authorization": "Key " + api_key, "Content-Type": "application/json"}
+    req = urllib.request.Request(base, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=45) as response:
+        job = json.loads(response.read().decode("utf-8"))
+    status_url = job.get("status_url")
+    response_url = job.get("response_url")
+    if not status_url or not response_url:
+        raise RuntimeError("fal.ai növbə cavabı natamamdır.")
+    import time
+    deadline = time.time() + int(os.getenv("FAL_JOB_TIMEOUT_SECONDS", "360"))
+    while time.time() < deadline:
+        with urllib.request.urlopen(urllib.request.Request(status_url, headers={"Authorization": "Key " + api_key}), timeout=30) as response:
+            status = json.loads(response.read().decode("utf-8"))
+        if status.get("status") == "COMPLETED":
+            if status.get("error"):
+                raise RuntimeError("Generasiya xətası: " + str(status["error"])[:300])
+            with urllib.request.urlopen(urllib.request.Request(response_url, headers={"Authorization": "Key " + api_key}), timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        time.sleep(3)
+    raise TimeoutError("Generasiya hələ bitməyib. Bir az sonra yenidən yoxla.")
+
+
+def fal_media_url(data, kind):
+    item = data.get(kind)
+    if isinstance(item, dict) and item.get("url"):
+        return item["url"]
+    if kind == "image" and data.get("images"):
+        return data["images"][0].get("url")
+    if kind == "image" and data.get("images") and isinstance(data["images"][0], dict):
+        return data["images"][0].get("url")
+    raise RuntimeError("Model nəticəsində hazır media faylının linki tapılmadı.")
+
+
+async def create_and_send_media(update, kind, idea):
+    """Generate a real image/video/song with fal.ai and send it back in Telegram."""
+    if kind == "image":
+        model = os.getenv("FAL_IMAGE_MODEL", "fal-ai/flux-2")
+        payload = {"prompt": idea, "image_size": "landscape_4_3", "num_images": 1, "output_format": "png"}
+        media_kind, filename = "images", "task-worker-image.png"
+    elif kind == "song":
+        model = os.getenv("FAL_MUSIC_MODEL", "fal-ai/minimax-music/v2.5")
+        payload = {
+            "prompt": "Original Azerbaijani-language song about " + idea + ". Catchy melody, clear Azerbaijani vocals, polished studio production.",
+            "lyrics_optimizer": True,
+            "lyrics": "",
+            "is_instrumental": False,
+            "audio_setting": {"format": "mp3", "bitrate": "256000", "sample_rate": "44100"}
+        }
+        media_kind, filename = "audio", "task-worker-song.mp3"
+    else:
+        model = os.getenv("FAL_VIDEO_MODEL", "fal-ai/wan-25-preview/text-to-video")
+        style = "family-friendly colorful 3D cartoon animation" if kind == "cartoon" else "polished commercial product advertisement"
+        payload = {
+            "prompt": style + ". " + idea + ". Clear subject, coherent motion, cinematic camera, professional lighting, no subtitles, no watermark.",
+            "aspect_ratio": "16:9", "resolution": "720p", "duration": "5",
+            "enable_prompt_expansion": True, "enable_safety_checker": True
+        }
+        media_kind, filename = "video", "task-worker-video.mp4"
+
+    await update.message.reply_text("⏳ Süni intellekt media faylını hazırlayır. Bitən kimi bu Telegram çatına göndərəcəyəm.")
+    data = await asyncio.to_thread(fal_request, model, payload)
+    if media_kind == "images":
+        url = data.get("images", [{}])[0].get("url")
+    else:
+        url = data.get(media_kind, {}).get("url")
+    if not url:
+        raise RuntimeError("Generasiya xidməti fayl linki qaytarmadı.")
+    def download_media():
+        req = urllib.request.Request(url, headers={"User-Agent": "TaskWorkerAZ/1.0"})
+        with urllib.request.urlopen(req, timeout=90) as response:
+            content = response.read(49 * 1024 * 1024 + 1)
+        if len(content) > 49 * 1024 * 1024:
+            raise RuntimeError("Fayl Telegram göndərmə limitindən böyükdür.")
+        return content
+    content = await asyncio.to_thread(download_media)
+    from io import BytesIO
+    stream = BytesIO(content)
+    stream.name = filename
+    if media_kind == "images":
+        await update.message.reply_photo(photo=stream, caption="🖼️ Hazır AI şəkli")
+    elif media_kind == "video":
+        await update.message.reply_video(video=stream, caption="🎬 Hazır AI videosu", supports_streaming=True)
+    else:
+        await update.message.reply_audio(audio=stream, caption="🎵 Hazır AI mahnısı", title="Task Worker AZ")
+
+
 async def creative_request(update, context, kind):
     if not await private_only(update):
         return
@@ -819,64 +912,23 @@ async def creative_request(update, context, kind):
         await update.message.reply_text("Mövzunu da yaz. Nümunə: " + examples[kind])
         return
     idea = idea[:700]
-    if kind == "cartoon":
-        answer = (
-            "🎬 CİZGİ FİLMİ LAYİHƏSİ\n"
-            f"Mövzu: {idea}\n\n"
-            "Ad: Sehrli Macəra\n"
-            "Janr: Uşaq animasiyası | Müddət: 1–2 dəqiqə\n"
-            "Personajlar: maraqlı və mehriban baş qəhrəman, köməkçi dost, kiçik maneə.\n\n"
-            "SƏHNƏLƏR\n"
-            "1. Giriş — qəhrəman öz dünyasında qeyri-adi bir sirr görür.\n"
-            "2. Çağırış — sirri araşdırmaq üçün yola çıxır.\n"
-            "3. Macəra — yeni dostla tanış olur və çətinliklə üzləşir.\n"
-            "4. Həll — ağıllı və mehriban davranaraq problemi həll edir.\n"
-            "5. Final — dostluq və cəsarət haqqında xoş mesajla bitir.\n\n"
-            "VİZUAL TƏSVİR\n"
-            f"Rəngarəng, uşaqlar üçün uyğun 3D animasiya üslubu; mövzu: {idea}. "
-            "Personajların görünüşü bütün səhnələrdə eyni saxlanılsın.\n\n"
-            "Qeyd: bot hazırda ssenari və səhnə planı hazırlayır; MP4 animasiya videosunu özü render etmir."
-        )
-    elif kind == "ad":
-        answer = (
-            "📢 REKLAM ÇARXI\n"
-            f"Məhsul/xidmət: {idea}\n\n"
-            "0–3 san: Diqqətçəkən sual və ya problem.\n"
-            "3–8 san: Məhsulu aydın, cəlbedici kadrda göstər.\n"
-            "8–15 san: Əsas üstünlükləri qısa və dürüst təqdim et.\n"
-            "15–20 san: Aydın çağırış — əlaqə saxla və ya ətraflı məlumat al.\n\n"
-            "SƏSLƏNDİRMƏ MƏTNİ\n"
-            f"“{idea} haqqında daha çox öyrən! Sənin ehtiyacına uyğun həlli kəşf et. "
-            "Ətraflı məlumat üçün indi bizimlə əlaqə saxla.”\n\n"
-            "Qeyd: bu, reklam ssenarisidir; video faylı hələ yaradılmır."
-        )
-    elif kind == "song":
-        answer = (
-            "🎵 ORİJİNAL MAHNI MƏTNİ\n"
-            f"Mövzu: {idea}\n\n"
-            "Bənd 1\n"
-            "Yeni bir səhər doğar, ümid düşər qəlbimə,\n"
-            "Bir arzunun işığı yol göstərər hər günə.\n"
-            "Addım-addım irəli, xəyallarım yanımda,\n"
-            "Gözəl bir dünya qurar dostluq hər zamanımda.\n\n"
-            "Nəqarət\n"
-            "Gəl, birlikdə oxuyaq, qoy sevinc yayılsın,\n"
-            "Balaca arzular da böyük ümidə dönsün.\n"
-            "Səsimiz göyə qalxsın, ürəklər işıqlansın,\n"
-            "Bu gözəl hekayəmiz hər kəsə yayılsın!\n\n"
-            "Qeyd: bot sözləri yazır; oxunan audio və musiqi faylı yaratmır."
-        )
-    else:
-        answer = (
-            "🖼️ ŞƏKİL ÜÇÜN HAZIR PROMPT\n"
-            f"Mövzu: {idea}\n\n"
-            "Prompt: Create a polished, colorful, family-friendly illustration of "
-            f"{idea}. Expressive characters, appealing composition, cinematic soft lighting, "
-            "rich details, clean background, high quality, no text, no watermark. "
-            "Keep the character design consistent and suitable for a children's animation.\n\n"
-            "Qeyd: bu, şəkil generatoruna veriləcək təsvir mətnidir; bot hələ şəkil faylı yaratmır."
-        )
-    await update.message.reply_text(answer)
+    if os.getenv("FAL_KEY", "").strip():
+        try:
+            await create_and_send_media(update, kind, idea)
+        except Exception as exc:
+            log.exception("fal.ai media generation failed")
+            await update.message.reply_text(
+                "⚠️ Media yaratmaq alınmadı: " + str(exc)[:350] +
+                "\nAçarı, fal.ai balansını və model icazəsini yoxla. Heç bir hazır fayl yaradılmış kimi göstərilmir."
+            )
+        return
+
+    await update.message.reply_text(
+        "🎨 Yaradıcı Studio hazırdır, amma media API açarı hələ qoşulmayıb.\n"
+        "Railway-də FAL_KEY dəyişənini əlavə etdikdən sonra bu əmr hazır fayl yarada biləcək.\n\n"
+        "Mövzu: " + idea + "\n"
+        "Dəstəklənən nəticələr: /cartoon — MP4, /ad — MP4, /song — MP3, /image — PNG."
+    )
 
 
 async def cartoon(update, context):
