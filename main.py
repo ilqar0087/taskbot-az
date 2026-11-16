@@ -486,7 +486,7 @@ async def status(update, context):
         return
     mode = get_mode(update.effective_user.id)
     await update.message.reply_text("Vəziyyət: " + ("🚀 REAL" if mode == "real" else "🧪 DEMO") +
-        "\\nMənbələr: GitHub nağd bounty, Jobicy, Remote OK.\\n/scan — axtarış\\n/azjobs — Azərbaycan platformaları")
+        "\nMənbələr: GitHub nağd bounty, Jobicy, Remote OK.\n/scan — axtarış\n/azjobs — Azərbaycan platformaları")
 
 
 async def myid(update, context):
