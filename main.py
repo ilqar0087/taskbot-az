@@ -223,11 +223,25 @@ def connect():
     CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY, task_id INTEGER, note TEXT, created TEXT);
     CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY, task_id INTEGER, cents INTEGER, note TEXT, created TEXT);
     CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
+    CREATE TABLE IF NOT EXISTS user_settings(user_id TEXT PRIMARY KEY, task_mode TEXT NOT NULL DEFAULT 'real');
     """)
     columns = {row[1] for row in db.execute("PRAGMA table_info(opportunities)")}
     if "active" not in columns:
         db.execute("ALTER TABLE opportunities ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     return db
+
+
+def get_mode(user_id):
+    with connect() as db:
+        row = db.execute("SELECT task_mode FROM user_settings WHERE user_id=?", (str(user_id),)).fetchone()
+    return row[0] if row else "real"
+
+
+def set_mode(user_id, mode):
+    with connect() as db:
+        db.execute("INSERT INTO user_settings(user_id,task_mode) VALUES(?,?) "
+                   "ON CONFLICT(user_id) DO UPDATE SET task_mode=excluded.task_mode",
+                   (str(user_id), mode))
 
 
 def fetch_github_bounties():
@@ -418,7 +432,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f"Yeni istifadəçi: {user.full_name} | @{user.username or 'yoxdur'} | ID: {user.id}")
         except Exception:
             log.exception("Owner notification failed")
-    mode = context.user_data.get("task_mode", "demo")
+    mode = get_mode(user.id)
     await update.message.reply_text(
         "🤖 Task Worker AZ\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
@@ -438,15 +452,41 @@ async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "task_mode_demo":
-        context.user_data["task_mode"] = "demo"
-        label = "🧪 DEMO rejimi seçildi. Heç bir müraciət və iş icrası edilmir."
+        mode = "demo"
+        label = "🧪 DEMO rejimi seçildi."
     elif query.data == "task_mode_real":
-        context.user_data["task_mode"] = "real"
-        label = ("🚀 REAL rejimi seçildi. Bot bounty və uzaqdan iş elanlarını axtarır. "
-                 "Platformaya müraciət və ödəniş addımları avtomatik edilmir; elan şərtləri və işə başlamaq sənin təsdiqini tələb edir.")
+        mode = "real"
+        label = ("🚀 REAL rejimi aktivdir. Bot real elanları axtaracaq və yeniləri barədə xəbər verəcək. "
+                 "Heç bir saxta qazanc yazılmır; müraciət və işə başlamaq üçün təsdiq tələb olunur.")
     else:
         return
-    await query.message.reply_text(label, reply_markup=mode_keyboard(context.user_data["task_mode"]))
+    set_mode(query.from_user.id, mode)
+    await query.message.reply_text(label, reply_markup=mode_keyboard(mode))
+
+
+async def real_mode(update, context):
+    if not await private_only(update):
+        return
+    set_mode(update.effective_user.id, "real")
+    await update.message.reply_text(
+        "🚀 REAL rejim aktivdir və yadda saxlanıldı. Bot açıq ödənişli elanları axtaracaq; "
+        "yeni nəticələr barədə xəbər verəcək. /scan — indi axtar.",
+        reply_markup=mode_keyboard("real"))
+
+
+async def demo_mode(update, context):
+    if not await private_only(update):
+        return
+    set_mode(update.effective_user.id, "demo")
+    await update.message.reply_text("🧪 DEMO rejimi aktivdir.", reply_markup=mode_keyboard("demo"))
+
+
+async def status(update, context):
+    if not await private_only(update):
+        return
+    mode = get_mode(update.effective_user.id)
+    await update.message.reply_text("Vəziyyət: " + ("🚀 REAL" if mode == "real" else "🧪 DEMO") +
+        "\\nMənbələr: GitHub nağd bounty, Jobicy, Remote OK.\\n/scan — axtarış\\n/azjobs — Azərbaycan platformaları")
 
 
 async def myid(update, context):
@@ -641,7 +681,8 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
     app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
-        ("start", start), ("id", myid), ("tasks", tasks), ("azjobs", azjobs), ("scan", scan),
+        ("start", start), ("id", myid), ("real", real_mode), ("demo", demo_mode), ("status", status),
+        ("tasks", tasks), ("azjobs", azjobs), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
