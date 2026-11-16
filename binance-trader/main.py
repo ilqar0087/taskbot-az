@@ -167,11 +167,19 @@ async def resume_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Skan yenidən aktivdir.")
 
 async def scan_loop(app):
+    global LAST_EARN_SCAN
     while True:
         try:
             await scan_all(app)
         except Exception:
             log.exception("Skan dövründə xəta")
+        now = datetime.now(timezone.utc)
+        if LAST_EARN_SCAN is None or (now - LAST_EARN_SCAN).total_seconds() >= 86400:
+            try:
+                await send_owner(app, await earn_report())
+            except Exception as exc:
+                await send_owner(app, "Earn yoxlaması üçün read-only Binance API açarı tələb olunur. /earn ilə əl ilə də yoxlaya bilərsən. " + str(exc)[:250])
+            LAST_EARN_SCAN = now
         await asyncio.sleep(settings.scan_interval)
 
 async def post_init(app):
