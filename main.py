@@ -37,6 +37,27 @@ SITES = [
     ("Remote OK", "https://remoteok.com/", "Uzaqdan iş elanları. Bot açıq feed-dən elanları çəkir; müraciət əl ilə edilir."),
 ]
 
+AZERBAIJAN_LEADS = [
+    {
+        "name": "Welo Data — Azerbaijani Talent Hub",
+        "url": "https://jobs.lever.co/weloglobal/e0af350d-f782-4fd7-9f4a-7a011df6bcab",
+        "status": "İştirakçı bazasına qəbul açıqdır; bu, aktiv vakansiya və zəmanətli iş deyil.",
+        "details": "Azərbaycan dili ana dili/yaxın səviyyə, Azərbaycanda yaşamaq və ingilis dili tələb olunur. Layihə çıxanda tapşırıq və ödəniş ayrıca bildirilir."
+    },
+    {
+        "name": "Welo Data — AI Content Evaluator (Azerbaijani)",
+        "url": "https://az.linkedin.com/jobs/view/freelance-ai-content-evaluator-azerbaijani-%E2%80%93-remote-short-term-project-at-welo-data-4393263482",
+        "status": "Elan axtarış nəticəsində aktiv görünür; müraciətdən əvvəl səhifədə statusu təsdiqlə.",
+        "details": "Elan təxminən $25/saat task-based ödəniş göstərir; 2–3 həftəlik layihə, ingilis dili və şəxsi kompüter tələb olunur. Seçilmə və iş həcmi zəmanətli deyil."
+    },
+    {
+        "name": "Work.az — Azərbaycan üzrə yerli və frilans işlər",
+        "url": "https://work.az/",
+        "status": "Daimi elan kataloqu; hər elanın statusu ayrıca yoxlanmalıdır.",
+        "details": "Müştəri ilə iş həcmini, qiyməti, son tarixi və ödəniş qaydasını yazılı razılaşdır."
+    }
+]
+
 GITHUB_QUERIES = [
     "is:issue is:open label:bounty",
     "is:issue is:open bounty",
@@ -361,6 +382,16 @@ async def tasks(update, context):
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
  
+async def azjobs(update, context):
+    if not await private_only(update):
+        return
+    lines = ["🇦🇿 Azərbaycan üçün yoxlanmış iş istiqamətləri:"]
+    for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
+        lines.append(f"\\n{i}. {lead['name']}\\nStatus: {lead['status']}\\nTələblər: {lead['details']}\\n{lead['url']}")
+    lines.append("\\nDiqqət: heç bir qeydiyyat və ya müraciət üçün əvvəlcədən pul ödəmə. Ödəniş yalnız işə qəbul və konkret layihə təsdiqlənəndən sonra məlum olur.")
+    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+
+
 async def faucet(update, context):
     if not await private_only(update):
         return
@@ -530,7 +561,7 @@ def main():
         raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
     app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
-        ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
+        ("start", start), ("id", myid), ("tasks", tasks), ("azjobs", azjobs), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
