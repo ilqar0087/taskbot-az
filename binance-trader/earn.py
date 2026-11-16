@@ -20,7 +20,7 @@ def _signed_get(path: str, params: dict, api_key: str, secret: str):
 
 def fetch_earn_products(api_key: str, secret: str, size: int = 100) -> list:
     if not api_key or not secret:
-        raise RuntimeError("Earn məhsullarını yoxlamaq üçün Binance read-only API açarı lazımdır.")
+        return [{"type": "Earn", "error": "Məhsul APR siyahısı üçün ayrıca Binance MAINNET read-only API açarı tələb olunur."}]
     products = []
     for kind, path in (
         ("Flexible", "/sapi/v1/simple-earn/flexible/list"),
