@@ -68,11 +68,21 @@ async def scan_all(app, manual=False):
                 continue
             try:
                 signal = await asyncio.to_thread(scan_market, symbol, futures)
-                approved, note, sizing = approve_trade(signal, 100.0, settings)
+                approved, note, sizing = approve_trade(signal, settings.risk_equity_usd, settings)
                 save_signal(settings.database_path, symbol, market_name, signal, approved, note)
                 text = fmt_signal(symbol, market_name, signal, approved, note)
-                if text and (approved or manual):
+                if text:
                     messages.append(text)
+                if market_name == "spot" and signal.get("long_term_action") == "BUY":
+                    zone = signal.get("long_term_buy_zone")
+                    zone_text = f"{zone[0]} – {zone[1]}" if zone else "hesablanmayıb"
+                    messages.append(
+                        f"🧭 UZUNMÜDDƏTLİ ALIŞ İZLƏMƏSİ | {symbol}\n"
+                        f"Müddət: {signal.get('long_term_horizon')}\n"
+                        f"Etibarlılıq balı: {signal.get('long_term_confidence')}%\n"
+                        f"İzlənəcək zona: {zone_text}\n"
+                        "Bu yalnız xəbərdarlıqdır; avtomatik alış etmir."
+                    )
             except Exception as exc:
                 log.warning("Scan failed for %s %s: %s", market_name, symbol, exc)
     LAST_SCAN = datetime.now(timezone.utc).isoformat()
@@ -107,6 +117,7 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Spot skanı: {settings.spot_enabled}\nFutures skanı: {settings.futures_enabled}\n"
         f"Leverage həddi: 3x–{settings.max_leverage}x\n"
         f"Risk/əməliyyat: {settings.risk_per_trade_pct}%\n"
+        f"Risk hesablaması üçün equity: ${settings.risk_equity_usd:.2f}\n"
         f"Gündəlik stop: {settings.daily_loss_limit_pct}%\n"
         f"Son skan: {LAST_SCAN}\nPauza: {PAUSED}"
     )
