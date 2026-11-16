@@ -42,6 +42,12 @@ SITES = [
 
 AZERBAIJAN_LEADS = [
     {
+        "name": "Microworker.app — USDT/USDC BEP20 mikrotapşırıqları",
+        "url": "https://microworker.app/",
+        "status": "Azərbaycan ölkələr siyahısındadır. Sayt USDT/USDC BEP20 ödənişi və $5 minimum çıxarış bildirir; platformanın öz payout statistikası hələ kiçikdir.",
+        "details": "Qeydiyyat pulsuzdur. Tapşırığı özün yerinə yetirib düzgün sübut göndərməlisən; bot tapşırıqları axtarıb süzür, amma CAPTCHA, sosial hesab fəaliyyəti və insan sübutu tələb edən işi sənin əvəzinə etmir. Qazanc təsdiqləndikdən 3 gün sonra çıxarıla bilər. Depozit etmə."
+    },
+    {
         "name": "Jwuma / Corpshore — Azərbaycan AI tapşırıqları",
         "url": "https://platform.corpshore.ai/azerbaijan",
         "status": "Azərbaycan ayrıca dəstəklənən ölkə kimi göstərilir; bu, avtomatik iş zəmanəti deyil.",
