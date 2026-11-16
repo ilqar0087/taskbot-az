@@ -88,6 +88,9 @@ def format_earn_report(products: list, campaigns: list) -> str:
         for c in campaigns:
             lines.append(f"• {c['title']}\n  {c['link']}")
     else:
-        lines.append("\nBonus kampaniyaları: rəsmi elan lenti qoşulandan sonra yoxlanacaq. Kupon/voucher tələb edənlər filtrdən keçirilir.")
+        lines.append("\nRəsmi bonus səhifələri (aktiv layihə və uyğunluq Binance hesabında yoxlanmalıdır):")
+        lines.append("• Launchpool / HODLer Airdrops: https://www.binance.com/en/launchpool")
+        lines.append("• Megadrop: https://www.binance.com/en/megadrop/")
+        lines.append("Kupon/voucher tələb edən təkliflər qəbul edilmir.")
     lines.append("\n⚠️ APR zəmanətli qazanc deyil. Bot yalnız məlumat verir; sənin təsdiqin olmadan abunəlik, köçürmə və ya alış etmir.")
     return "\n".join(lines)[:3900]
