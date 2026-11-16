@@ -1,14 +1,23 @@
-# TaskBot AZ
+# Task Worker AZ
 
-Private Telegram assistant for tracking online-work opportunities and actual received payments.
+Telegram assistant for discovering public open-source bounty issues, listing work platforms, and tracking work notes and payments.
 
-Commands: /start, /id, /tasks, /done ID note, /paid ID amount note, /balance, /history.
+## Telegram commands
+- `/start`, `/id`
+- `/scan` — searches public GitHub issues for open bounty/reward opportunities
+- `/opportunities` — shows discovered issues
+- `/view ID` — shows details, reward hints, and AI-eligibility classification
+- `/tasks` — lists other task marketplaces
+- `/done ID note`, `/paid ID amount note`, `/balance`, `/history`
 
-Railway variables:
-- TELEGRAM_BOT_TOKEN: Telegram bot token (secret).
-- OWNER_TELEGRAM_ID: owner's numeric Telegram user ID.
-- DATABASE_PATH: /data/taskbot.sqlite3.
+## Railway variables
+- `TELEGRAM_BOT_TOKEN` — private Telegram token
+- `OWNER_TELEGRAM_ID` — owner's numeric Telegram ID
+- `DATABASE_PATH` — use `/data/taskbot.sqlite3` with a persistent volume mounted at `/data`
 
-Attach a persistent Railway volume at /data to preserve the ledger across redeploys.
-
-The bot does not generate money by itself. Listed services are external platforms; task availability, eligibility and payouts vary by country and account. The balance only records payments actually received. There are no automatic third-party platform API integrations yet.
+## Important limitations
+- The first live scanner queries GitHub's public Search API; other listed platforms are directory links, not authenticated integrations.
+- The bot discovers opportunities and tracks actual payments. It does not create marketplace accounts, submit proposals, click through human-only tasks, or claim work is complete.
+- AI-agent permission must be verified in each bounty's own rules. An automated text classifier is only a hint, not proof of permission.
+- No income is guaranteed. The balance records only payments the owner manually confirms as received.
+- Never pay an upfront fee or connect a wallet to an unverified bounty. Human review is required before starting or submitting any work.
