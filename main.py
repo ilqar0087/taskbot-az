@@ -78,7 +78,7 @@ AZERBAIJAN_LEADS = [
         "status": "Elan kataloqu; hər elanın etibarlılığı və statusu ayrıca yoxlanmalıdır.",
         "details": "Müştəri ilə iş həcmini, qiyməti, son tarixi və ödənişi yazılı razılaşdır. İşə başlamaq üçün əvvəlcədən pul göndərmə."
     }
-}
+]
 
 GITHUB_QUERIES = [
     "is:issue is:open label:bounty",
