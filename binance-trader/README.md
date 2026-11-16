@@ -1,6 +1,6 @@
 # AI Binance Trader (safe first build)
 
-Private Telegram-controlled Binance market scanner. The initial release is **TESTNET-only** and defaults to analysis/alerts, not order placement.
+Telegram-controlled Binance market scanner. The initial release is **TESTNET-only** and defaults to analysis/alerts, not order placement.
 
 ## Included
 - Spot and USDT-M Futures market scans
