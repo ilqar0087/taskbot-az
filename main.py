@@ -434,26 +434,26 @@ async def prepare(update, context):
         await update.message.reply_text("Elan tapılmadı. /scan ilə siyahını yenilə.")
         return
     title = row["title"]
-    summary = re.sub(r"\\s+", " ", row["summary"] or "").strip()
+    summary = re.sub(r"\s+", " ", row["summary"] or "").strip()
     if len(summary) > 650:
         summary = summary[:650] + "…"
     draft = (
-        "Müraciət mətni — göndərməzdən əvvəl öz təcrübənə uyğun redaktə et:\\n\\n"
-        "Salam!\\n\\n"
+        "Müraciət mətni — göndərməzdən əvvəl öz təcrübənə uyğun redaktə et:\n\n"
+        "Salam!\n\n"
         f"“{title}” elanı ilə maraqlanıram. Tapşırığın tələblərini nəzərdən keçirməyə və "
-        "razılaşdırılmış müddətdə keyfiyyətli nəticə təqdim etməyə hazıram.\\n\\n"
+        "razılaşdırılmış müddətdə keyfiyyətli nəticə təqdim etməyə hazıram.\n\n"
         "İşə başlamazdan əvvəl gözlənilən nəticəni, qəbul meyarlarını, son tarixi və ödəniş "
         "qaydalarını dəqiqləşdirmək istərdim. AI alətlərindən istifadə yalnız elan və platforma "
-        "qaydaları buna açıq icazə verərsə mümkün olacaq.\\n\\n"
-        "Mənim uyğun təcrübəm: [öz real təcrübəni burada yaz].\\n"
+        "qaydaları buna açıq icazə verərsə mümkün olacaq.\n\n"
+        "Mənim uyğun təcrübəm: [öz real təcrübəni burada yaz].\n"
         "Təşəkkür edirəm."
     )
     await update.message.reply_text(
-        f"📄 Elan #{row['id']} üçün müraciət layihəsi\\n"
-        f"Mənbə: {row['source']}\\nÖdəniş: {row['reward']}\\n"
-        f"Uyğunluq: {row['eligibility']}\\n\\n"
-        f"Elan xülasəsi: {summary}\\n\\n{draft}\\n\\n"
-        f"Orijinal elan: {row['url']}\\n\\n"
+        f"📄 Elan #{row['id']} üçün müraciət layihəsi\n"
+        f"Mənbə: {row['source']}\nÖdəniş: {row['reward']}\n"
+        f"Uyğunluq: {row['eligibility']}\n\n"
+        f"Elan xülasəsi: {summary}\n\n{draft}\n\n"
+        f"Orijinal elan: {row['url']}\n\n"
         "Bu layihə avtomatik göndərilmir. Təcrübə hissəsini yalnız doğru məlumatla doldur və "
         "müraciəti platformanın özündə özün təsdiqlə.",
         disable_web_page_preview=True
