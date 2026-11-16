@@ -536,6 +536,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
         "/scan — prioritet 3 mobil platformanı və əlavə elanları axtar\n"
         "/mobile — yalnız 3 prioritet mobil platforma\n"
+        "/earn — reklam/video/mikro-tapşırıq platformaları\n"
         "/tasks — tapşırıq mənbələri\n"
         "/opportunities — tapılmış elanlar\n"
         "/view ID — elan təfərrüatı\n"
@@ -629,9 +630,9 @@ async def earn(update, context):
         return
     lines = ["💸 REKLAM VƏ MİKRO-TAPŞIRIQ PLATFORMALARI", "Bot bu mənbələri izləyir; aktiv tapşırıq və ödəniş zəmanətli deyil:"]
     for i, lead in enumerate(EARN_PLATFORM_LEADS, 1):
-        lines.append(f"\\n{i}. {lead['name']}\\nStatus: {lead['status']}\\nQaydalar: {lead['details']}\\n{lead['url']}")
-    lines.append("\\nVacib: bot reklamları avtomatik izləmir və CAPTCHA/sorğu/offerwall tapşırığını sənin yerinə etmir. Yalnız platformanın açıq API-si və yazılı icazəsi olan işlər ayrıca avtomatlaşdırıla bilər. Depozit tələb edən işlərə pul yatırma.")
-    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+        lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nQaydalar: {lead['details']}\n{lead['url']}")
+    lines.append("\nVacib: bot reklamları avtomatik izləmir və CAPTCHA/sorğu/offerwall tapşırığını sənin yerinə etmir. Yalnız platformanın açıq API-si və yazılı icazəsi olan işlər ayrıca avtomatlaşdırıla bilər. Depozit tələb edən işlərə pul yatırma.")
+    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
 
 async def faucet(update, context):
