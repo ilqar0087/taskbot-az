@@ -27,6 +27,10 @@ SITES = [
     ("Mindrift", "https://www.mindrift.ai/", "AI mətn qiymətləndirmə və təlim layihələri. Azərbaycan üzrə qəbul və ödəniş üsulunu əvvəlcədən təsdiqlə."),
     ("Clickworker", "https://www.clickworker.com/clickworker/", "Mikrotapşırıqlar və AI data işi. Azərbaycan qeydiyyatı və ödəniş üsulu Payment details bölməsində təsdiqlənməlidir."),
     ("CrowdGen by Appen", "https://crowdgen.com/", "AI data layihələri. Layihənin Azərbaycana açıq olmasını və ödəniş metodunu hər elanda yoxla."),
+    ("Jwuma / Corpshore", "https://platform.corpshore.ai/azerbaijan", "Azərbaycan üçün AI data, mətn, tərcümə və səs tapşırıqları. USD bank hesabına köçürmə göstərilir; telefonda işləmə və konkret layihə mövcudluğunu əvvəlcədən təsdiqlə."),
+    ("Crowtado", "https://www.crowtado.com/en", "Telefonla foto, video və səs tapşırıqları. Azərbaycan üzrə tapşırıq və çıxarış metodunu hesabda yoxla; gəlir zəmanətli deyil."),
+    ("KLKT / CNTXT AI", "https://play.google.com/store/apps/details?id=com.cntxt.cntxtai.data.services", "Android tətbiqində foto, video və audio data tapşırıqları. Azərbaycan üçün payout metodunu və aktiv tapşırıqları tətbiqdə təsdiqlə."),
+    ("Andovar", "https://careers.andovar.com/freelance-and-work-from-home-opportunities/", "Dil və səs yazısı layihələri. Konkret Azərbaycan layihəsinin açıq olub-olmadığını yoxla; əvvəlki səs yazısı elanı aktiv olmaya bilər."),
     ("Work.az", "https://work.az/", "Azərbaycan üzrə yerli işlər. Müştəri ilə qiyməti, son tarixi və ödənişi yazılı razılaşdır."),
     ("Upwork", "https://www.upwork.com/", "Beynəlxalq freelance layihələr. Komissiya və Azərbaycanda işləyən çıxarış üsulunu əvvəlcədən yoxla."),
     ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı. Sifarişlər insan təsdiqi ilə; Azərbaycanda işləyən çıxarış metodunu yoxla."),
@@ -39,24 +43,42 @@ SITES = [
 
 AZERBAIJAN_LEADS = [
     {
-        "name": "Welo Data — Azerbaijani Talent Hub",
-        "url": "https://jobs.lever.co/weloglobal/e0af350d-f782-4fd7-9f4a-7a011df6bcab",
-        "status": "İştirakçı bazasına qəbul açıqdır; bu, aktiv vakansiya və zəmanətli iş deyil.",
-        "details": "Azərbaycan dili ana dili/yaxın səviyyə, Azərbaycanda yaşamaq və ingilis dili tələb olunur. Layihə çıxanda tapşırıq və ödəniş ayrıca bildirilir."
+        "name": "Jwuma / Corpshore — Azərbaycan AI tapşırıqları",
+        "url": "https://platform.corpshore.ai/azerbaijan",
+        "status": "Azərbaycan ayrıca dəstəklənən ölkə kimi göstərilir; bu, avtomatik iş zəmanəti deyil.",
+        "details": "Mətn annotasiyası, tərcümə yoxlaması, QA və səs/məlumat toplama. Ödəniş həftəlik batch kimi göstərilir; Azərbaycan üçün USD bank köçürməsi, 2% komissiya (minimum $10, maksimum $30). USD hesab tələb oluna bilər. Telefon uyğunluğu və real tapşırıq mövcudluğu qeydiyyatdan əvvəl təsdiqlənməlidir."
     },
     {
-        "name": "Welo Data — AI Content Evaluator (Azerbaijani)",
-        "url": "https://az.linkedin.com/jobs/view/freelance-ai-content-evaluator-azerbaijani-%E2%80%93-remote-short-term-project-at-welo-data-4393263482",
-        "status": "Elan axtarış nəticəsində aktiv görünür; müraciətdən əvvəl səhifədə statusu təsdiqlə.",
-        "details": "Elan təxminən $25/saat task-based ödəniş göstərir; 2–3 həftəlik layihə, ingilis dili və şəxsi kompüter tələb olunur. Seçilmə və iş həcmi zəmanətli deyil."
+        "name": "Crowtado — telefonla foto, video və audio tapşırıqları",
+        "url": "https://www.crowtado.com/en",
+        "status": "Platforma və mobil tapşırıqlar mövcuddur; Azərbaycan üzrə tapşırıq və pul çıxarışı ayrıca yoxlanmalıdır.",
+        "details": "Yalnız tətbiqdə görünən aktiv tapşırığa və hesabda göstərilən payout şərtlərinə əsasən işə başla. Ödəniş və ölkə uyğunluğu təsdiqlənmədən gəlir hesab etmə."
+    },
+    {
+        "name": "KLKT / CNTXT AI — Android data tapşırıqları",
+        "url": "https://play.google.com/store/apps/details?id=com.cntxt.cntxtai.data.services",
+        "status": "Android tətbiqi mövcuddur; Azərbaycan üçün aktiv layihə və payout təsdiqi tələb olunur.",
+        "details": "Foto, video və audio məlumat toplama tapşırıqları. Ödəniş metodları ölkəyə görə dəyişə bilər; tətbiqdə Azərbaycan hesabı üçün çıxarış üsulunu yoxla."
+    },
+    {
+        "name": "Andovar — dil və səs yazısı layihələri",
+        "url": "https://careers.andovar.com/freelance-and-work-from-home-opportunities/",
+        "status": "Ümumi freelancer qeydiyyat səhifəsi mövcuddur; əvvəlki Azərbaycan səs layihəsinin aktivliyi təsdiqlənməyib.",
+        "details": "Azərbaycan dili üzrə konkret layihə açıqdırsa müraciət et. Tapşırıq, qiymət, cihaz tələbi və ödəniş müddətini yazılı təsdiqlə."
+    },
+    {
+        "name": "Welo Data — Azerbaijani Talent Hub",
+        "url": "https://jobs.lever.co/weloglobal/e0af350d-f782-4fd7-9f4a-7a011df6bcab",
+        "status": "İştirakçı bazasına qəbul; aktiv vakansiya və zəmanətli iş deyil.",
+        "details": "Azərbaycan dili və ingilis dili tələb oluna bilər. Welo-nun rəsmi FAQ-sına görə mobil telefonla işləmək mümkün deyil; kompüter tələb olunur. Buna görə telefon siyahısında ehtiyat variantdır."
     },
     {
         "name": "Work.az — Azərbaycan üzrə yerli və frilans işlər",
         "url": "https://work.az/",
-        "status": "Daimi elan kataloqu; hər elanın statusu ayrıca yoxlanmalıdır.",
-        "details": "Müştəri ilə iş həcmini, qiyməti, son tarixi və ödəniş qaydasını yazılı razılaşdır."
+        "status": "Elan kataloqu; hər elanın etibarlılığı və statusu ayrıca yoxlanmalıdır.",
+        "details": "Müştəri ilə iş həcmini, qiyməti, son tarixi və ödənişi yazılı razılaşdır. İşə başlamaq üçün əvvəlcədən pul göndərmə."
     }
-]
+}
 
 GITHUB_QUERIES = [
     "is:issue is:open label:bounty",
@@ -430,10 +452,10 @@ async def tasks(update, context):
 async def azjobs(update, context):
     if not await private_only(update):
         return
-    lines = ["🇦🇿 Azərbaycan üçün yoxlanmış iş istiqamətləri:"]
+    lines = ["🇦🇿 Azərbaycan üçün iş platformaları — telefon uyğunluğu və ödəniş statusu ayrıca göstərilir:"]
     for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
         lines.append(f"\\n{i}. {lead['name']}\\nStatus: {lead['status']}\\nTələblər: {lead['details']}\\n{lead['url']}")
-    lines.append("\\nDiqqət: heç bir qeydiyyat və ya müraciət üçün əvvəlcədən pul ödəmə. Ödəniş yalnız işə qəbul və konkret layihə təsdiqlənəndən sonra məlum olur.")
+    lines.append("\\nUSD ödəniş üçün Kapital Bank-da ayrıca USD hesabı lazım ola bilər. Jwuma USD bank köçürməsi göstərir; digər platformalarda payout ölkə və hesab üzrə təsdiqlənməlidir. Heç bir sayta iş almaq üçün depozit ödəmə.")
     await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
 
 
