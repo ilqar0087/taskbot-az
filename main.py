@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 OWNER = os.getenv("OWNER_TELEGRAM_ID", "")
@@ -42,6 +42,14 @@ GITHUB_QUERIES = [
 HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
 AGENT_WORDS = ("agent allowed", "ai agent", "agent-only", "agent only", "autonomous agent")
 REWARD_RE = re.compile(r"(?:\$\s?\d[\d,]*(?:\.\d{1,2})?|\d[\d,]*(?:\.\d{1,2})?\s?(?:USDC|USD|ETH|SOL))", re.I)
+
+
+def mode_keyboard(mode="demo"):
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(("✅ " if mode == "demo" else "") + "🧪 DEMO", callback_data="task_mode_demo"),
+        InlineKeyboardButton(("✅ " if mode == "real" else "") + "🚀 REAL", callback_data="task_mode_real"),
+    ]])
+
 
 
 def connect():
@@ -152,16 +160,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=f"Yeni istifadəçi: {user.full_name} | @{user.username or 'yoxdur'} | ID: {user.id}")
         except Exception:
             log.exception("Owner notification failed")
+    mode = context.user_data.get("task_mode", "demo")
     await update.message.reply_text(
-        "🤖 Task Worker AZ\n\n"
+        "🤖 Task Worker AZ\n"
+        f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
         "/scan — açıq bounty tapşırıqlarını axtar\n"
         "/tasks — tapşırıq mənbələri\n"
         "/opportunities — tapılmış elanlar\n"
         "/view ID — elan təfərrüatı\n"
         "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
         "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
-        "/balance — real gəlir\n/history — tarixçə\n/id — Telegram ID"
+        "/balance — real gəlir\n/history — tarixçə\n/id — Telegram ID\n\n"
+        "DEMO: sınaq və elan baxışı. REAL: cari açıq elanlar; müraciət və işi tamamlamaq üçün sahib təsdiqi tələb olunur.",
+        reply_markup=mode_keyboard(mode)
     )
+
+
+async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "task_mode_demo":
+        context.user_data["task_mode"] = "demo"
+        label = "🧪 DEMO rejimi seçildi. Heç bir müraciət və iş icrası edilmir."
+    elif query.data == "task_mode_real":
+        context.user_data["task_mode"] = "real"
+        label = ("🚀 REAL rejimi seçildi. Bot cari açıq elanları axtarır. "
+                 "Platformaya müraciət və ödəniş addımları avtomatik edilmir; elan şərtləri və işə başlamaq sənin təsdiqini tələb edir.")
+    else:
+        return
+    await query.message.reply_text(label, reply_markup=mode_keyboard(context.user_data["task_mode"]))
 
 
 async def myid(update, context):
@@ -299,6 +326,7 @@ def main():
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
         app.add_handler(CommandHandler(name, handler))
+    app.add_handler(CallbackQueryHandler(mode_callback, pattern=r"^task_mode_"))
     log.info("Task Worker AZ started")
     app.run_polling()
 
