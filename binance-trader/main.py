@@ -100,7 +100,7 @@ async def scan_all(app, manual=False):
     return "Skan tamamlandı."
 
 async def earn_report():
-    products = await asyncio.to_thread(fetch_earn_products, settings.api_key, settings.api_secret)
+    products = await asyncio.to_thread(fetch_earn_products, settings.earn_api_key, settings.earn_api_secret)
     feed_url = __import__("os").getenv("BINANCE_ANNOUNCEMENTS_RSS_URL", "")
     campaigns = await asyncio.to_thread(fetch_campaign_headlines, feed_url) if feed_url else []
     return format_earn_report(products, campaigns)
