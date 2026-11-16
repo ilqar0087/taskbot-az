@@ -28,6 +28,7 @@ MENU = InlineKeyboardMarkup([
      InlineKeyboardButton("🎬 Video / klip", callback_data="video")],
     [InlineKeyboardButton("🎵 Musiqi yarat", callback_data="music"),
      InlineKeyboardButton("📢 Reklam çarxı", callback_data="ad")],
+    [InlineKeyboardButton("🎧 Audio / video formatları", callback_data="audio_tools")],
     [InlineKeyboardButton("ℹ️ Kömək", callback_data="help")],
     [InlineKeyboardButton("🧪 DEMO", callback_data="media_mode_demo"),
      InlineKeyboardButton("🚀 REAL", callback_data="media_mode_real")],
@@ -39,6 +40,12 @@ LABELS = {
     "music": "Musiqi",
     "ad": "Reklam çarxı",
 }
+
+FORMAT_MENU = InlineKeyboardMarkup([
+    [InlineKeyboardButton("MP3", callback_data="fmt_mp3"), InlineKeyboardButton("WAV", callback_data="fmt_wav")],
+    [InlineKeyboardButton("FLAC", callback_data="fmt_flac"), InlineKeyboardButton("M4A", callback_data="fmt_m4a")],
+    [InlineKeyboardButton("MP4", callback_data="fmt_mp4"), InlineKeyboardButton("MOV", callback_data="fmt_mov")],
+])
 
 
 def font(size, bold=True):
@@ -155,6 +162,65 @@ def make_video(chat_id, poster_path, audio_path):
     return out
 
 
+def convert_media(chat_id, source_path, target_format):
+    """Convert an uploaded audio/video file with FFmpeg; no AI enhancement is implied."""
+    source = Path(source_path)
+    out = WORK / f"{chat_id}-converted.{target_format}"
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    cmd = [ffmpeg, "-y", "-i", str(source)]
+    if target_format in ("mp3", "m4a", "flac", "wav"):
+        cmd += ["-vn"]
+        if target_format == "mp3":
+            cmd += ["-codec:a", "libmp3lame", "-q:a", "2"]
+        elif target_format == "m4a":
+            cmd += ["-codec:a", "aac", "-b:a", "256k"]
+        elif target_format == "flac":
+            cmd += ["-codec:a", "flac"]
+        else:
+            cmd += ["-codec:a", "pcm_s16le"]
+    elif target_format in ("mp4", "mov"):
+        cmd += ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k"]
+        if target_format == "mp4":
+            cmd += ["-movflags", "+faststart"]
+    else:
+        raise ValueError("Bu format dəstəklənmir.")
+    cmd += [str(out)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if result.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        detail = (result.stderr or "FFmpeg çevirmə xətası")[-900:]
+        raise RuntimeError(detail)
+    return out
+
+
+async def media_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+    media = msg.audio or msg.voice or msg.video or msg.document or msg.animation
+    if not media:
+        return
+    file_name = getattr(media, "file_name", None) or (
+        "voice.ogg" if msg.voice else "video.mp4" if msg.video else "upload.bin"
+    )
+    suffix = Path(file_name).suffix.lower() or (".ogg" if msg.voice else ".bin")
+    if suffix not in {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus",
+                       ".mp4", ".mov", ".mkv", ".webm", ".avi", ".mpeg", ".mpg"}:
+        await msg.reply_text("Bu fayl formatını tanımadım. Audio: MP3/WAV/FLAC/M4A/OGG; video: MP4/MOV/MKV/WEBM göndər.")
+        return
+    if media.file_size and media.file_size > 45 * 1024 * 1024:
+        await msg.reply_text("Fayl 45 MB-dan böyükdür. Zəhmət olmasa daha kiçik fayl göndər.")
+        return
+    tg_file = await context.bot.get_file(media.file_id)
+    source = WORK / f"{chat_id}-source{suffix}"
+    await tg_file.download_to_drive(custom_path=str(source))
+    SESSIONS[chat_id] = {"mode": "convert", "source": str(source), "source_name": file_name,
+                         "run_mode": context.user_data.get("media_mode", "demo")}
+    await msg.reply_text(
+        f"✅ Fayl qəbul edildi: {file_name}\nHansı formata çevirim?",
+        reply_markup=FORMAT_MENU
+    )
+
+
 async def begin(update, context, mode):
     chat_id = update.effective_chat.id
     SESSIONS[chat_id] = {"mode": mode, "photo": None, "run_mode": context.user_data.get("media_mode", "demo")}
@@ -169,7 +235,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Salam! 👋 AI Media Studio\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL fayl hazırlama'}\n"
-        "Poster, qısa video, instrumental fon musiqisi və reklam maketi hazırlaya bilərəm.\n"
+        "Poster, qısa video, instrumental fon musiqisi, reklam maketi və audio/video format çevirmə.\n"
         "Qeyd: hazırkı generator lokal şablonlardan istifadə edir; xarici peşəkar AI modeli hələ qoşulmayıb.\n\n"
         "Xidməti və rejimi seç:",
         reply_markup=MENU
@@ -197,6 +263,30 @@ async def callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🚀 REAL rejimi seçildi. Bot göndərilə bilən şəkil/video/audio faylları yaradır. "
             "Qeyd: hələ xarici peşəkar AI generasiya API-si qoşulmayıb; lokal şablon generatoru işləyir."
         )
+        return
+    if q.data == "audio_tools":
+        await q.message.reply_text("Audio və ya video faylını göndər. Sonra çıxış formatını seçəcəksən: MP3, WAV, FLAC, M4A, MP4 və ya MOV.")
+        return
+    if q.data.startswith("fmt_"):
+        chat_id = q.message.chat_id
+        session = SESSIONS.get(chat_id, {})
+        if session.get("mode") != "convert":
+            await q.message.reply_text("Əvvəl audio/video faylını göndər.")
+            return
+        fmt = q.data[4:]
+        await q.message.reply_text(f"⏳ Fayl {fmt.upper()} formatına çevrilir...")
+        try:
+            converted = await asyncio.to_thread(convert_media, chat_id, session["source"], fmt)
+            with open(converted, "rb") as stream:
+                if fmt in ("mp4", "mov"):
+                    await q.message.reply_video(video=stream, caption=f"Hazır video: {fmt.upper()}")
+                else:
+                    await q.message.reply_document(document=stream, filename=converted.name, caption=f"Hazır audio: {fmt.upper()}")
+            SESSIONS.pop(chat_id, None)
+            await q.message.reply_text("Başqa fayl çevirmək üçün yenə fayl göndər və ya menyudan xidmət seç.", reply_markup=MENU)
+        except Exception as exc:
+            log.exception("Media conversion failed")
+            await q.message.reply_text(f"Çevirmə alınmadı: {str(exc)[:300]}")
         return
     if q.data == "help":
         await q.message.reply_text(
@@ -265,6 +355,7 @@ def main():
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CallbackQueryHandler(callback))
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))
+    app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE | filters.VIDEO | filters.Document.ALL | filters.ANIMATION, media_file_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     log.info("AI Media Studio started")
     app.run_polling()
