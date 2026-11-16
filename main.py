@@ -420,9 +420,45 @@ def fetch_mobile_platform_leads():
         })
     return found
 
+EARN_PLATFORM_LEADS = [
+    {
+        "name": "JumpTask — video, reklam və mikro-tapşırıqlar",
+        "url": "https://jumptask.io/",
+        "status": "Rəsmi platforma mikro-tapşırıq, video/reklam və digər offerwall işləri təqdim edir. Azərbaycan üçün real tapşırıq və payout seçimi hesabın Payout bölməsində yoxlanmalıdır.",
+        "details": "1,000 kredit = $1. İlk çıxarış həddi $1, sonrakılar $0.50. Kripto daxil olmaqla ödəniş üsulları ölkəyə görə dəyişir. Bot yalnız açıq elanları göstərir; hesab girişi, reklam izləmə və offerwall tapşırığı istifadəçi tərəfindən edilməlidir."
+    },
+    {
+        "name": "PrizeRebel — sorğular və offerwall tapşırıqları",
+        "url": "https://www.prizerebel.com/",
+        "status": "Rəsmi dəstək səhifəsi platformanın bir çox ölkədə, o cümlədən ABŞ/UK/CA/AU xaricində də işlədiyini bildirir; sorğu sayı regiona görə dəyişir.",
+        "details": "Sorğular, offerwall və mükafat tapşırıqları. Azərbaycan hesabında mövcud təklifləri, minimum çıxarışı və faktiki payout üsulunu qeydiyyatdan sonra yoxla. Avtomatik sorğu doldurma və saxta fəaliyyət edilmir."
+    },
+    {
+        "name": "PaidVerts — reklam izləmə",
+        "url": "https://paidverts.org/",
+        "status": "Sayt pulsuz reklam baxışları ilə BAP xalı verdiyini bildirir; bunlar birbaşa nağd pul deyil. Rəsmi şərtlərdə gündə 10-a qədər pulsuz reklam, hər biri 15 saniyə göstərilir.",
+        "details": "Rəsmi şərtlər reklam baxış taymerini atlamağı və reklam baxışını avtomatlaşdırmağı qadağan edir. BAP pul deyil; gündəlik gəlir mexanizmi ayrıca şərtlərə bağlıdır. Minimum çıxarış $5 kimi göstərilir. Depozit etmə; yalnız əl ilə və qaydalara uyğun istifadə et."
+    }
+]
+
+def fetch_earn_platform_leads():
+    found = []
+    for lead in EARN_PLATFORM_LEADS:
+        found.append({
+            "source": "Reklam və mikro-tapşırıq platforması",
+            "title": lead["name"],
+            "url": lead["url"],
+            "reward": "Tapşırıq və ölkə üzrə dəyişir; hesabda təsdiqlənməlidir",
+            "eligibility": "REAL PLATFORM | AZ və payout ayrıca yoxlanmalıdır | MANUAL_ONLY",
+            "summary": lead["status"] + " " + lead["details"],
+            "updated": datetime.now(timezone.utc).isoformat(),
+        })
+    return found
+
+
 def fetch_all_opportunities():
     # Prioritize explicit Azerbaijan task projects/platforms, then live remote vacancies and cash bounties.
-    return fetch_mobile_platform_leads() + fetch_remote_job_feeds() + fetch_github_bounties()
+    return fetch_earn_platform_leads() + fetch_mobile_platform_leads() + fetch_remote_job_feeds() + fetch_github_bounties()
 
 
 def save_opportunities(items):
@@ -586,6 +622,16 @@ async def mobile(update, context):
         lines.append(f"\n{lead['name']}\nStatus: {lead['status']}\n{lead['details']}\n{lead['url']}")
     lines.append("\nQeyd: bu siyahı aktiv tapşırıq zəmanəti deyil. Hesabda açıq iş, cihaz tələbi və payout təsdiqlənməlidir. Bot sənin hesabına daxil olmur və insan təsdiqi tələb edən işi avtomatik göndərmir.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
+
+
+async def earn(update, context):
+    if not await private_only(update):
+        return
+    lines = ["💸 REKLAM VƏ MİKRO-TAPŞIRIQ PLATFORMALARI", "Bot bu mənbələri izləyir; aktiv tapşırıq və ödəniş zəmanətli deyil:"]
+    for i, lead in enumerate(EARN_PLATFORM_LEADS, 1):
+        lines.append(f"\\n{i}. {lead['name']}\\nStatus: {lead['status']}\\nQaydalar: {lead['details']}\\n{lead['url']}")
+    lines.append("\\nVacib: bot reklamları avtomatik izləmir və CAPTCHA/sorğu/offerwall tapşırığını sənin yerinə etmir. Yalnız platformanın açıq API-si və yazılı icazəsi olan işlər ayrıca avtomatlaşdırıla bilər. Depozit tələb edən işlərə pul yatırma.")
+    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
 
 
 async def faucet(update, context):
@@ -763,7 +809,7 @@ def main():
     app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
         ("start", start), ("id", myid), ("real", real_mode), ("demo", demo_mode), ("status", status),
-        ("tasks", tasks), ("azjobs", azjobs), ("mobile", mobile), ("scan", scan),
+        ("tasks", tasks), ("azjobs", azjobs), ("mobile", mobile), ("earn", earn), ("scan", scan),
         ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
