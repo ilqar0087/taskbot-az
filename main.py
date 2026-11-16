@@ -8,7 +8,6 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN=os.getenv("TELEGRAM_BOT_TOKEN")
 OWNER=os.getenv("OWNER_TELEGRAM_ID")
 DB=os.getenv("DATABASE_PATH","/data/taskbot.sqlite3")
-MAX_USERS=10
 logging.basicConfig(level=logging.INFO)
 log=logging.getLogger("taskbot")
 SITES=[
@@ -36,55 +35,33 @@ def connect():
  CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,title TEXT,url TEXT,note TEXT);
  CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY,task_id INTEGER,note TEXT,created TEXT);
  CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY,task_id INTEGER,cents INTEGER,note TEXT,created TEXT);
- CREATE TABLE IF NOT EXISTS allowed_users(user_id TEXT PRIMARY KEY, added_by TEXT, created TEXT);
+ CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
  """)
- if OWNER:
-  c.execute("INSERT OR IGNORE INTO allowed_users(user_id,added_by,created) VALUES(?,?,?)",(str(OWNER),str(OWNER),datetime.now(timezone.utc).isoformat()))
  for site in SITES:
   c.execute("INSERT OR IGNORE INTO tasks(title,url,note) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE title=?)",(*site,site[0]))
  c.commit(); return c
 def cash(n): return f"${n/100:.2f}"
-async def is_owner(u):
- return bool(OWNER) and str(u.effective_user.id)==str(OWNER)
 async def allowed(u):
- if not OWNER:
-  await u.effective_message.reply_text(f"Bot hazırdır. Sənin Telegram ID-n: {u.effective_user.id}\nSahib ID-si serverdə OWNER_TELEGRAM_ID kimi təyin olunmalıdır.")
-  return False
  if u.effective_chat.type!="private":
   await u.effective_message.reply_text("Təhlükəsizlik üçün bot yalnız şəxsi çatda istifadə olunur.")
-  return False
- with connect() as c:
-  row=c.execute("SELECT 1 FROM allowed_users WHERE user_id=?",(str(u.effective_user.id),)).fetchone()
- if not row:
-  await u.effective_message.reply_text("Bu botdan istifadə icazən yoxdur. İcazə üçün bot sahibinə müraciət et.")
   return False
  return True
 async def start(u:Update,ctx:ContextTypes.DEFAULT_TYPE):
  if not await allowed(u): return
- await u.message.reply_text("TaskBot AZ hazırdır 🤖\n/tasks — platformalar\n/done ID qeyd — işi tamamlandı kimi yaz\n/paid ID məbləğ qeyd — faktiki aldığın pulu yaz\n/balance — real gəlir\n/history — tarixçə")
-async def myid(u,ctx): await u.message.reply_text(f"Telegram ID: {u.effective_user.id}")
-async def users(u,ctx):
- if not await is_owner(u): return await u.effective_message.reply_text("Bu əmr yalnız bot sahibinə açıqdır.")
- with connect() as c: rows=c.execute("SELECT user_id FROM allowed_users ORDER BY created").fetchall()
- await u.message.reply_text("İcazəli istifadəçilər (maksimum 10):\\n"+"\\n".join(f"{i+1}. {r['user_id']}" for i,r in enumerate(rows)))
-async def adduser(u,ctx):
- if not await is_owner(u): return await u.effective_message.reply_text("Bu əmr yalnız bot sahibinə açıqdır.")
- if len(ctx.args)!=1 or not ctx.args[0].isdigit(): return await u.message.reply_text("İstifadə: /adduser TELEGRAM_ID")
- uid=ctx.args[0]
+ user=u.effective_user
  with connect() as c:
-  exists=c.execute("SELECT 1 FROM allowed_users WHERE user_id=?",(uid,)).fetchone()
-  count=c.execute("SELECT COUNT(*) FROM allowed_users").fetchone()[0]
-  if exists: return await u.message.reply_text("Bu istifadəçi artıq icazəlidir.")
-  if count>=MAX_USERS: return await u.message.reply_text("10 istifadəçi limiti dolub. Əvvəl /removeuser ID ilə birini sil.")
-  c.execute("INSERT INTO allowed_users(user_id,added_by,created) VALUES(?,?,?)",(uid,str(u.effective_user.id),datetime.now(timezone.utc).isoformat()))
- await u.message.reply_text(f"{uid} əlavə edildi. İcazəli istifadəçi sayı: {count+1}/10")
-async def removeuser(u,ctx):
- if not await is_owner(u): return await u.effective_message.reply_text("Bu əmr yalnız bot sahibinə açıqdır.")
- if len(ctx.args)!=1 or not ctx.args[0].isdigit(): return await u.message.reply_text("İstifadə: /removeuser TELEGRAM_ID")
- uid=ctx.args[0]
- if uid==str(OWNER): return await u.message.reply_text("Əsas sahibin icazəsini silmək olmaz.")
- with connect() as c: cur=c.execute("DELETE FROM allowed_users WHERE user_id=?",(uid,))
- await u.message.reply_text("İcazə silindi." if cur.rowcount else "Bu ID siyahıda tapılmadı.")
+  cur=c.execute("INSERT OR IGNORE INTO visitors(user_id,username,full_name,first_seen) VALUES(?,?,?,?)",
+   (str(user.id),user.username or "",user.full_name,datetime.now(timezone.utc).isoformat()))
+  is_new=cur.rowcount>0
+ if is_new and OWNER and str(user.id)!=str(OWNER):
+  try:
+   uname="@"+user.username if user.username else "yoxdur"
+   await ctx.bot.send_message(chat_id=int(OWNER),
+    text=f"🔔 Yeni istifadəçi qoşuldu!\\nAd: {user.full_name}\\nUsername: {uname}\\nTelegram ID: {user.id}")
+  except Exception:
+   log.exception("Owner notification failed")
+ await u.message.reply_text("TaskBot AZ hazırdır 🤖\\n/tasks — platformalar\\n/done ID qeyd — işi tamamlandı kimi yaz\\n/paid ID məbləğ qeyd — faktiki aldığın pulu yaz\\n/balance — real gəlir\\n/history — tarixçə")
+async def myid(u,ctx): await u.message.reply_text(f"Telegram ID: {u.effective_user.id}")
 async def tasks(u,ctx):
  if not await allowed(u): return
  with connect() as c: rows=c.execute("SELECT * FROM tasks ORDER BY id").fetchall()
@@ -133,7 +110,7 @@ async def history(u,ctx):
 def main():
  if not TOKEN: raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
  app=Application.builder().token(TOKEN).build()
- for cmd,fn in [("start",start),("id",myid),("tasks",tasks),("done",done),("paid",paid),("balance",balance),("history",history),("users",users),("adduser",adduser),("removeuser",removeuser)]:
+ for cmd,fn in [("start",start),("id",myid),("tasks",tasks),("done",done),("paid",paid),("balance",balance),("history",history)]:
   app.add_handler(CommandHandler(cmd,fn))
  log.info("TaskBot AZ starting"); app.run_polling()
 if __name__=="__main__": main()
