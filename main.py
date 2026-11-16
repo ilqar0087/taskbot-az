@@ -127,8 +127,8 @@ async def scheduled_scan(app):
             if OWNER and new_items:
                 lines = ["🆕 Yeni açıq bounty elanları:"]
                 for item in new_items[:8]:
-                    lines.append(f"\\n• {item['title']}\\n{item['reward']} | {item['eligibility']}\\n{item['url']}")
-                await app.bot.send_message(chat_id=int(OWNER), text="\\n".join(lines), disable_web_page_preview=True)
+                    lines.append(f"\n• {item['title']}\n{item['reward']} | {item['eligibility']}\n{item['url']}")
+                await app.bot.send_message(chat_id=int(OWNER), text="\n".join(lines), disable_web_page_preview=True)
         except Exception:
             log.exception("Scheduled task discovery failed")
         await asyncio.sleep(6 * 60 * 60)
