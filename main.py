@@ -379,7 +379,7 @@ async def scan(update, context):
         return
     await update.message.reply_text("Açıq bounty elanları axtarılır...")
     try:
-        items = await asyncio.to_thread(fetch_github_bounties)
+        items = await asyncio.to_thread(fetch_all_opportunities)
         await asyncio.to_thread(save_opportunities, items)
         await update.message.reply_text(f"Yoxlama bitdi: {len(items)} elan tapıldı. /opportunities yaz.")
     except Exception as exc:
@@ -414,7 +414,7 @@ async def view(update, context):
         await update.message.reply_text("Elan tapılmadı. /scan ilə yenilə.")
         return
     await update.message.reply_text(
-        f"{row['title']}\nMükafat: {row['reward']}\nİcazə: {row['eligibility']}\n"
+        f"{row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n"
         f"Yenilənib: {row['updated']}\n{row['url']}\n\n"
         f"Qısa təsvir: {row['summary'] or 'Təsvir yoxdur'}\n\n"
         "İşə başlamazdan əvvəl qaydaları, AI istifadəsinə icazəni və ödəniş şərtlərini özün təsdiqlə.",
