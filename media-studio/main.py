@@ -167,7 +167,12 @@ def convert_media(chat_id, source_path, target_format):
     source = Path(source_path)
     out = WORK / f"{chat_id}-converted.{target_format}"
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
-    cmd = [ffmpeg, "-y", "-i", str(source)]
+    audio_only_source = source.suffix.lower() in {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg", ".opus"}
+    if target_format in ("mp4", "mov") and audio_only_source:
+        cover = make_poster(chat_id, "AI MEDIA STUDIO")
+        cmd = [ffmpeg, "-y", "-loop", "1", "-i", str(cover), "-i", str(source), "-shortest"]
+    else:
+        cmd = [ffmpeg, "-y", "-i", str(source)]
     if target_format in ("mp3", "m4a", "flac", "wav"):
         cmd += ["-vn"]
         if target_format == "mp3":
