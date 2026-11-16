@@ -8,7 +8,8 @@ Telegram-controlled Binance market scanner. The initial release is **TESTNET-onl
 - EMA, RSI, MACD momentum, ATR volatility and volume checks
 - Order-book imbalance, spread, funding rate and open-interest snapshot where supported
 - Pre-trade risk gate: confidence threshold, risk/reward, position sizing, daily loss limit
-- 3x–10x leverage recommendation (not an instruction to use leverage)\n- Long-horizon 1d / 1w technical watchlist for roughly 1 week to 1 month
+- 3x–10x leverage recommendation (not an instruction to use leverage)
+- Long-horizon 1d / 1w technical watchlist for roughly 1 week to 1 month
 - SQLite signal history
 - Telegram owner-only controls: /scan, /status, /history, /pause, /resume
 - No martingale, no averaging down, no withdrawal permission or withdrawal code
