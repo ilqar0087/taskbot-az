@@ -499,7 +499,7 @@ async def scheduled_scan(app):
                 await app.bot.send_message(chat_id=int(OWNER), text="\n".join(lines), disable_web_page_preview=True)
         except Exception:
             log.exception("Scheduled task discovery failed")
-        await asyncio.sleep(6 * 60 * 60)
+        await asyncio.sleep(10 * 60)
 
 
 async def post_init(app):
