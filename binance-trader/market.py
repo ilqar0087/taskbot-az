@@ -2,19 +2,23 @@ import ccxt
 
 from config import Settings
 
+
 def make_exchange(settings: Settings, futures: bool = True):
+    """Create a public, unauthenticated Binance market-data client.
+
+    This release only reads public spot/futures market data. It deliberately
+    does not attach API credentials and never calls order-placement methods.
+    Public mainnet data is used so signals reflect the actual market rather
+    than the thinner Testnet order books.
+    """
     cls = ccxt.binanceusdm if futures else ccxt.binance
     params = {
         "enableRateLimit": True,
         "timeout": 20000,
         "options": {"defaultType": "future" if futures else "spot"},
     }
-    if settings.api_key and settings.api_secret:
-        params.update({"apiKey": settings.api_key, "secret": settings.api_secret})
-    exchange = cls(params)
-    # This project deliberately refuses live mode.
-    exchange.set_sandbox_mode(True)
-    return exchange
+    return cls(params)
+
 
 def get_snapshot(exchange, symbol: str) -> dict:
     markets = exchange.load_markets()
