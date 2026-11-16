@@ -1,116 +1,283 @@
-import logging, os, sqlite3
-from pathlib import Path
+import asyncio
+import json
+import logging
+import os
+import re
+import sqlite3
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-TOKEN=os.getenv("TELEGRAM_BOT_TOKEN")
-OWNER=os.getenv("OWNER_TELEGRAM_ID")
-DB=os.getenv("DATABASE_PATH","/data/taskbot.sqlite3")
-logging.basicConfig(level=logging.INFO)
-log=logging.getLogger("taskbot")
-SITES=[
-("Clickworker","https://www.clickworker.com/clickworker/","İnsan hesabı ilə mikrotapşırıqlar; avtomatik botla klikləmək və təqdim etmək olmaz."),
-("Toloka","https://toloka.ai/tolokers/","İnsan tərəfindən yerinə yetirilməli tapşırıqlar; AI yalnız tapşırıq qaydaları açıq icazə verəndə kömək edə bilər."),
-("SproutGigs","https://sproutgigs.com/","İnsan tərəfindən görülən mikroişlər; bot, skript və avtomatik sübut təqdimatı qadağandır."),
-("Fiverr","https://www.fiverr.com/","Xidmət satışı; profil, müştəri ünsiyyəti və sifariş təsdiqi insan nəzarəti ilə olmalıdır."),
-("Upwork","https://www.upwork.com/","Freelance layihələr; təklif və müştəri ünsiyyəti insan təsdiqi ilə, platforma qaydalarına uyğun aparılmalıdır."),
-("make.fun","https://make.fun/","AI agentlər üçün kod yarışmaları; yalnız pulsuz girişli bountylər seçilməlidir. Qazanc yalnız qalib olduqda USDC/Solana ilədir."),
-("Clustly","https://www.clustly.ai/","AI agent xidməti yerləşdirib müştəri sifarişi almaq; ödəniş USDC/Solana escrow-dadır və müştəri təsdiqi tələb olunur."),
-("Superteam Earn","https://superteam.fun/earn","Yalnız agentlərə açıq (AGENT_ALLOWED/AGENT_ONLY) elanlar izlənməlidir; insan üçün olan elanlara bot müraciət etməməlidir."),
-("BasedAgents","https://basedagents.ai/","AI agentlər üçün tapşırıq bazarı; qəbul edilən işə görə USDC ödənişi. Əsas şəbəkə Base-dir, Solana deyil; müştəri qəbul etməlidir."),
-("TaskMarket / Daydreams","https://taskmarket.dev/","AI agentlər üçün escrow-li tapşırıqlar; qəbul edilən işə görə USDC (Base) və ya dəstəklənən digər şəbəkə. Bəzi əməliyyatlar ödəniş tələb edə bilər."),
-("AgentBounties","https://agentbounties.app/","AI agentlər üçün yoxlanıla bilən nəticə mükafatları; USDC, əsasən Base ekosistemi. Yalnız real escrow və pulsuz iştirak olanları seç."),
-("BaseBounty","https://www.basebounty.app/","AI agentlər və insanlar üçün Base şəbəkəsində USDC mükafatlı tapşırıqlar; kəşfiyyat üçün ödənişli əməliyyat ola bilər."),
-("AgentHansa","https://www.agenthansa.com/","AI agentlər üçün quest və kommersiya tapşırıqları; qeydiyyat, tapşırıq şərtləri və mükafat növü ayrıca yoxlanmalıdır."),
-("Jobbi Agent Gigs","https://jobbi.org/gigs/report/","AI agentlər üçün müxtəlif bounty lövhələrini toplayan kataloqdur; özü ödəniş etmir, yalnız tapşırıq mənbələrini tapmağa kömək edir."),
-("Algora","https://algora.io/","Açıq mənbə proqramlaşdırma issue-ləri üçün mükafatlar; agent kod hazırlamağa kömək edə bilər, amma GitHub PR və ödəniş qaydaları insan nəzarəti tələb edə bilər."),
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+OWNER = os.getenv("OWNER_TELEGRAM_ID", "")
+DB = os.getenv("DATABASE_PATH", "/data/taskbot.sqlite3")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("task-worker")
 
+SITES = [
+    ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Açıq mənbə proqramlaşdırma mükafatları; hər elanın şərtlərini yoxla."),
+    ("Algora", "https://algora.io/", "Açıq mənbə issue-ləri üçün bounty platforması; iştirak şərtləri dəyişir."),
+    ("Superteam Earn", "https://superteam.fun/earn", "Yalnız elanda AI agentə açıq icazə varsa avtomatlaşdırma kömək edə bilər."),
+    ("make.fun", "https://make.fun/", "AI agentlər üçün yarışma və bounty elanları; ödəniş yalnız qalibiyyət və qəbuldan sonra."),
+    ("Clustly", "https://www.clustly.ai/", "Agent xidmətləri və sifarişlər; escrow və müştəri təsdiqi tələb oluna bilər."),
+    ("BasedAgents", "https://basedagents.ai/", "Agent tapşırıqları; mükafat və şərtləri hər elanda yoxla."),
+    ("TaskMarket", "https://taskmarket.dev/", "Agent tapşırıqları; bəzi əməliyyatlar ödəniş və ya wallet tələb edə bilər."),
+    ("Clickworker", "https://www.clickworker.com/clickworker/", "İnsan hesabı ilə mikrotapşırıqlar; botla klikləmək və saxta sübut göndərmək olmaz."),
+    ("Toloka", "https://toloka.ai/tolokers/", "İnsan tərəfindən görülən tapşırıqlar; yalnız qaydalar açıq icazə verəndə AI köməyi."),
+    ("SproutGigs", "https://sproutgigs.com/", "İnsan mikroişləri; platforma qaydalarını pozan avtomatlaşdırma olmaz."),
+    ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı; profil, təklif və müştəri yazışması insan təsdiqi ilə."),
+    ("Upwork", "https://www.upwork.com/", "Freelance layihələr; müraciət və müştəri ünsiyyəti insan təsdiqi ilə."),
 ]
+
+GITHUB_QUERIES = [
+    "is:issue is:open label:bounty",
+    "is:issue is:open bounty",
+    'is:issue is:open "reward" "USDC"',
+]
+HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
+AGENT_WORDS = ("agent allowed", "ai agent", "agent-only", "agent only", "autonomous agent")
+REWARD_RE = re.compile(r"(?:\$\\s?\\d[\\d,]*(?:\\.\\d{1,2})?|\\d[\\d,]*(?:\\.\\d{1,2})?\\s?(?:USDC|USD|ETH|SOL))", re.I)
+
+
 def connect():
- Path(DB).parent.mkdir(parents=True,exist_ok=True)
- c=sqlite3.connect(DB); c.row_factory=sqlite3.Row
- c.executescript("""
- CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY,title TEXT,url TEXT,note TEXT);
- CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY,task_id INTEGER,note TEXT,created TEXT);
- CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY,task_id INTEGER,cents INTEGER,note TEXT,created TEXT);
- CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
- """)
- for site in SITES:
-  c.execute("INSERT OR IGNORE INTO tasks(title,url,note) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM tasks WHERE title=?)",(*site,site[0]))
- c.commit(); return c
-def cash(n): return f"${n/100:.2f}"
-async def allowed(u):
- if u.effective_chat.type!="private":
-  await u.effective_message.reply_text("Təhlükəsizlik üçün bot yalnız şəxsi çatda istifadə olunur.")
-  return False
- return True
-async def start(u:Update,ctx:ContextTypes.DEFAULT_TYPE):
- if not await allowed(u): return
- user=u.effective_user
- with connect() as c:
-  cur=c.execute("INSERT OR IGNORE INTO visitors(user_id,username,full_name,first_seen) VALUES(?,?,?,?)",
-   (str(user.id),user.username or "",user.full_name,datetime.now(timezone.utc).isoformat()))
-  is_new=cur.rowcount>0
- if is_new and OWNER and str(user.id)!=str(OWNER):
-  try:
-   uname="@"+user.username if user.username else "yoxdur"
-   await ctx.bot.send_message(chat_id=int(OWNER),
-    text=f"🔔 Yeni istifadəçi qoşuldu!\\nAd: {user.full_name}\\nUsername: {uname}\\nTelegram ID: {user.id}")
-  except Exception:
-   log.exception("Owner notification failed")
- await u.message.reply_text("TaskBot AZ hazırdır 🤖\\n/tasks — platformalar\\n/done ID qeyd — işi tamamlandı kimi yaz\\n/paid ID məbləğ qeyd — faktiki aldığın pulu yaz\\n/balance — real gəlir\\n/history — tarixçə")
-async def myid(u,ctx): await u.message.reply_text(f"Telegram ID: {u.effective_user.id}")
-async def tasks(u,ctx):
- if not await allowed(u): return
- with connect() as c: rows=c.execute("SELECT * FROM tasks ORDER BY id").fetchall()
- s=["Qazanc platformaları (işlər platformanın özündə verilir):"]
- for r in rows: s.append(f"\n{r['id']}. {r['title']}\n{r['note']}\n{r['url']}")
- s.append("\nTapşırıq sayı, ölkə uyğunluğu və ödəniş zəmanətli deyil.")
- await u.message.reply_text("\n".join(s),disable_web_page_preview=True)
-async def done(u,ctx):
- if not await allowed(u): return
- if not ctx.args: return await u.message.reply_text("İstifadə: /done ID qeyd")
- try: tid=int(ctx.args[0])
- except ValueError: return await u.message.reply_text("ID rəqəm olmalıdır.")
- with connect() as c:
-  t=c.execute("SELECT title FROM tasks WHERE id=?",(tid,)).fetchone()
-  if not t: return await u.message.reply_text("Tapşırıq tapılmadı.")
-  c.execute("INSERT INTO done(task_id,note,created) VALUES(?,?,?)",(tid," ".join(ctx.args[1:]),datetime.now(timezone.utc).isoformat()))
- await u.message.reply_text(f"{t['title']} tamamlandı kimi qeyd edildi. Pul gələndə /paid ilə faktiki məbləği yaz.")
-async def paid(u,ctx):
- if not await allowed(u): return
- if len(ctx.args)<2: return await u.message.reply_text("İstifadə: /paid ID məbləğ qeyd (məs: /paid 1 2.50 ödəniş)")
- try:
-  tid=int(ctx.args[0]); amount=Decimal(ctx.args[1].replace(",",".")); cents=int(amount*100)
-  if amount<=0 or cents<=0: raise ValueError()
- except (ValueError,InvalidOperation): return await u.message.reply_text("ID və müsbət məbləği düzgün yaz.")
- with connect() as c:
-  t=c.execute("SELECT title FROM tasks WHERE id=?",(tid,)).fetchone()
-  if not t: return await u.message.reply_text("Tapşırıq tapılmadı.")
-  c.execute("INSERT INTO income(task_id,cents,note,created) VALUES(?,?,?,?)",(tid,cents," ".join(ctx.args[2:]),datetime.now(timezone.utc).isoformat()))
- await u.message.reply_text(f"Faktiki alınmış ödəniş qeydə alındı: {cash(cents)} — {t['title']}")
-async def balance(u,ctx):
- if not await allowed(u): return
- with connect() as c:
-  total=c.execute("SELECT COALESCE(SUM(cents),0) FROM income").fetchone()[0]
-  count=c.execute("SELECT COUNT(*) FROM income").fetchone()[0]
-  pending=c.execute("SELECT COUNT(*) FROM done").fetchone()[0]
- await u.message.reply_text(f"Qeydə alınmış real gəlir: {cash(total)}\nÖdəniş sayı: {count}\nTamamlanmış tapşırıq qeydləri: {pending}\nBu, faktiki aldığın pulların uçotudur; platformadan çıxarılan balans deyil.")
-async def history(u,ctx):
- if not await allowed(u): return
- with connect() as c:
-  rows=c.execute("SELECT income.cents,income.note,tasks.title FROM income LEFT JOIN tasks ON tasks.id=income.task_id ORDER BY income.id DESC LIMIT 15").fetchall()
-  ds=c.execute("SELECT done.note,tasks.title FROM done JOIN tasks ON tasks.id=done.task_id ORDER BY done.id DESC LIMIT 10").fetchall()
- s=["Ödənişlər:"]+[f"+{cash(r['cents'])} — {r['title']} — {r['note']}" for r in rows]
- if not rows:s.append("Hələ ödəniş yoxdur.")
- s.append("\nTamamlanan işlər:"); s += [f"• {r['title']} — {r['note']}" for r in ds] or ["Hələ qeyd yoxdur."]
- await u.message.reply_text("\n".join(s))
+    Path(DB).parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB)
+    db.row_factory = sqlite3.Row
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS opportunities(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, title TEXT, url TEXT UNIQUE,
+      reward TEXT, eligibility TEXT, summary TEXT, updated TEXT
+    );
+    CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY, task_id INTEGER, note TEXT, created TEXT);
+    CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY, task_id INTEGER, cents INTEGER, note TEXT, created TEXT);
+    CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
+    """)
+    return db
+
+
+def fetch_github_bounties():
+    found = []
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/1.0"}
+    for query in GITHUB_QUERIES:
+        params = urllib.parse.urlencode({"q": query, "sort": "updated", "order": "desc", "per_page": 20})
+        req = urllib.request.Request("https://api.github.com/search/issues?" + params, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            for item in payload.get("items", []):
+                title = (item.get("title") or "").strip()
+                body = item.get("body") or ""
+                labels = [x.get("name", "") for x in item.get("labels", [])]
+                text = (title + " " + body + " " + " ".join(labels)).lower()
+                if not title or not item.get("html_url"):
+                    continue
+                if any(word in text for word in HUMAN_ONLY):
+                    eligibility = "HUMAN_ONLY"
+                elif any(word in text for word in AGENT_WORDS):
+                    eligibility = "AGENT_ALLOWED — yenə də şərtləri yoxla"
+                else:
+                    eligibility = "REVIEW_REQUIRED — AI agent icazəsi təsdiqlənməyib"
+                reward_match = REWARD_RE.search(title + " " + body)
+                reward = reward_match.group(0) if reward_match else "Mükafat göstərilməyib"
+                found.append({
+                    "source": "GitHub", "title": title[:240], "url": item["html_url"],
+                    "reward": reward, "eligibility": eligibility,
+                    "summary": re.sub(r"\\s+", " ", body).strip()[:500],
+                    "updated": item.get("updated_at") or datetime.now(timezone.utc).isoformat(),
+                })
+        except Exception as exc:
+            log.warning("GitHub task scan failed: %s", exc)
+    unique = {item["url"]: item for item in found}
+    return list(unique.values())[:40]
+
+
+def save_opportunities(items):
+    with connect() as db:
+        for item in items:
+            db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated)
+              VALUES(?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET
+              title=excluded.title,reward=excluded.reward,eligibility=excluded.eligibility,
+              summary=excluded.summary,updated=excluded.updated""",
+              (item["source"], item["title"], item["url"], item["reward"],
+               item["eligibility"], item["summary"], item["updated"]))
+
+
+async def private_only(update):
+    if not update.effective_chat or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("Təhlükəsizlik üçün bot yalnız şəxsi çatda işləyir.")
+        return False
+    return True
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await private_only(update):
+        return
+    user = update.effective_user
+    with connect() as db:
+        cur = db.execute("INSERT OR IGNORE INTO visitors(user_id,username,full_name,first_seen) VALUES(?,?,?,?)",
+            (str(user.id), user.username or "", user.full_name, datetime.now(timezone.utc).isoformat()))
+        is_new = cur.rowcount > 0
+    if is_new and OWNER and str(user.id) != OWNER:
+        try:
+            await context.bot.send_message(chat_id=int(OWNER),
+                text=f"Yeni istifadəçi: {user.full_name} | @{user.username or 'yoxdur'} | ID: {user.id}")
+        except Exception:
+            log.exception("Owner notification failed")
+    await update.message.reply_text(
+        "🤖 Task Worker AZ\\n\\n"
+        "/scan — açıq bounty tapşırıqlarını axtar\\n"
+        "/tasks — tapşırıq mənbələri\\n"
+        "/opportunities — tapılmış elanlar\\n"
+        "/view ID — elan təfərrüatı\\n"
+        "/done ID qeyd — işi tamamlandı kimi qeyd et\\n"
+        "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\\n"
+        "/balance — real gəlir\\n/history — tarixçə\\n/id — Telegram ID"
+    )
+
+
+async def myid(update, context):
+    await update.message.reply_text(f"Telegram ID: {update.effective_user.id}")
+
+
+async def tasks(update, context):
+    if not await private_only(update):
+        return
+    lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
+    lines += [f"\\n{i}. {name}\\n{note}\\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
+    lines.append("\\nBot yalnız açıq elanları tapır. Ölkə uyğunluğu, hesab tələbləri və ödəniş hər platformada ayrıca yoxlanmalıdır.")
+    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+
+
+async def scan(update, context):
+    if not await private_only(update):
+        return
+    await update.message.reply_text("Açıq bounty elanları axtarılır...")
+    try:
+        items = await asyncio.to_thread(fetch_github_bounties)
+        await asyncio.to_thread(save_opportunities, items)
+        await update.message.reply_text(f"Yoxlama bitdi: {len(items)} elan tapıldı. /opportunities yaz.")
+    except Exception as exc:
+        log.exception("Task scan failed")
+        await update.message.reply_text(f"Axtarış zamanı xəta: {str(exc)[:250]}")
+
+
+async def opportunities(update, context):
+    if not await private_only(update):
+        return
+    with connect() as db:
+        rows = db.execute("SELECT id,title,reward,eligibility,url FROM opportunities ORDER BY updated DESC LIMIT 15").fetchall()
+    if not rows:
+        await update.message.reply_text("Hələ elan tapılmayıb. Əvvəl /scan yaz.")
+        return
+    lines = ["Tapılmış açıq elanlar:"]
+    for row in rows:
+        lines.append(f"\\nID {row['id']}: {row['title']}\\nMükafat: {row['reward']}\\nİcazə: {row['eligibility']}\\n{row['url']}")
+    lines.append("\\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
+    await update.message.reply_text("\\n".join(lines), disable_web_page_preview=True)
+
+
+async def view(update, context):
+    if not await private_only(update):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("İstifadə: /view ID")
+        return
+    with connect() as db:
+        row = db.execute("SELECT * FROM opportunities WHERE id=?", (int(context.args[0]),)).fetchone()
+    if not row:
+        await update.message.reply_text("Elan tapılmadı. /scan ilə yenilə.")
+        return
+    await update.message.reply_text(
+        f"{row['title']}\\nMükafat: {row['reward']}\\nİcazə: {row['eligibility']}\\n"
+        f"Yenilənib: {row['updated']}\\n{row['url']}\\n\\n"
+        f"Qısa təsvir: {row['summary'] or 'Təsvir yoxdur'}\\n\\n"
+        "İşə başlamazdan əvvəl qaydaları, AI istifadəsinə icazəni və ödəniş şərtlərini özün təsdiqlə.",
+        disable_web_page_preview=True)
+
+
+async def done(update, context):
+    if not await private_only(update):
+        return
+    if len(context.args) < 2 or not context.args[0].isdigit():
+        await update.message.reply_text("İstifadə: /done ID qeyd")
+        return
+    task_id = int(context.args[0])
+    with connect() as db:
+        row = db.execute("SELECT title FROM opportunities WHERE id=?", (task_id,)).fetchone()
+        if not row:
+            await update.message.reply_text("Elan ID-si tapılmadı.")
+            return
+        db.execute("INSERT INTO done(task_id,note,created) VALUES(?,?,?)",
+            (task_id, " ".join(context.args[1:]), datetime.now(timezone.utc).isoformat()))
+    await update.message.reply_text("Tamamlandı kimi qeyd edildi. Bu qeyd ödəniş demək deyil; pul gələndə /paid yaz.")
+
+
+async def paid(update, context):
+    if not await private_only(update):
+        return
+    if len(context.args) < 2 or not context.args[0].isdigit():
+        await update.message.reply_text("İstifadə: /paid ID məbləğ qeyd")
+        return
+    try:
+        task_id = int(context.args[0])
+        amount = Decimal(context.args[1].replace(",", "."))
+        cents = int(amount * 100)
+        if amount <= 0 or cents <= 0:
+            raise ValueError()
+    except (ValueError, InvalidOperation):
+        await update.message.reply_text("ID və müsbət məbləği düzgün yaz.")
+        return
+    with connect() as db:
+        row = db.execute("SELECT title FROM opportunities WHERE id=?", (task_id,)).fetchone()
+        if not row:
+            await update.message.reply_text("Elan ID-si tapılmadı.")
+            return
+        db.execute("INSERT INTO income(task_id,cents,note,created) VALUES(?,?,?,?)",
+            (task_id, cents, " ".join(context.args[2:]), datetime.now(timezone.utc).isoformat()))
+    await update.message.reply_text("Faktiki alınmış ödəniş qeydə alındı: $" + f"{cents/100:.2f}")
+
+
+async def balance(update, context):
+    if not await private_only(update):
+        return
+    with connect() as db:
+        total = db.execute("SELECT COALESCE(SUM(cents),0) FROM income").fetchone()[0]
+        count = db.execute("SELECT COUNT(*) FROM income").fetchone()[0]
+    await update.message.reply_text("Qeydə alınmış faktiki gəlir: $" + f"{total/100:.2f}" + f"\\nÖdəniş sayı: {count}")
+
+
+async def history(update, context):
+    if not await private_only(update):
+        return
+    with connect() as db:
+        rows = db.execute("SELECT cents,note,task_id FROM income ORDER BY id DESC LIMIT 15").fetchall()
+        done_rows = db.execute("SELECT task_id,note FROM done ORDER BY id DESC LIMIT 10").fetchall()
+    lines = ["Ödənişlər:"] + ["+$" + f"{r['cents']/100:.2f}" + f" — elan {r['task_id']} — {r['note']}" for r in rows]
+    if not rows:
+        lines.append("Hələ ödəniş yoxdur.")
+    lines.append("\\nTamamlanan iş qeydləri:")
+    lines += [f"• Elan {r['task_id']} — {r['note']}" for r in done_rows] or ["Hələ qeyd yoxdur."]
+    await update.message.reply_text("\\n".join(lines))
+
+
 def main():
- if not TOKEN: raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
- app=Application.builder().token(TOKEN).build()
- for cmd,fn in [("start",start),("id",myid),("tasks",tasks),("done",done),("paid",paid),("balance",balance),("history",history)]:
-  app.add_handler(CommandHandler(cmd,fn))
- log.info("TaskBot AZ starting"); app.run_polling()
-if __name__=="__main__": main()
+    if not TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
+    app = Application.builder().token(TOKEN).build()
+    for name, handler in [
+        ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
+        ("opportunities", opportunities), ("view", view), ("done", done),
+        ("paid", paid), ("balance", balance), ("history", history)
+    ]:
+        app.add_handler(CommandHandler(name, handler))
+    log.info("Task Worker AZ started")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
