@@ -124,7 +124,7 @@ def has_competing_pull_request(owner, repo, issue_number):
         req = urllib.request.Request(comments_url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as response:
             comments = json.loads(response.read().decode("utf-8"))
-        pattern = re.compile(r"https?://github\\.com/%s/%s/pull/(\\d+)" % (re.escape(owner), re.escape(repo)), re.I)
+        pattern = re.compile(r"https?://github\.com/%s/%s/pull/(\d+)" % (re.escape(owner), re.escape(repo)), re.I)
         pr_numbers = set()
         for comment in comments:
             pr_numbers.update(pattern.findall(comment.get("body") or ""))
