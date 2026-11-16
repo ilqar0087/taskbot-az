@@ -10,7 +10,10 @@ Telegram-controlled Binance market scanner. The initial release is **TESTNET-onl
 - Pre-trade risk gate: confidence threshold, risk/reward, position sizing, daily loss limit
 - 3x–10x leverage recommendation (not an instruction to use leverage)
 - Long-horizon 1d / 1w technical watchlist for roughly 1 week to 1 month
-- Binance Simple Earn Flexible/Locked product scanner (read-only API access)\n- Daily Earn/bonus summary and manual Telegram /earn command\n- Campaign headline filter excludes coupon/voucher-required offers when a verified RSS feed is configured\n- SQLite signal history
+- Binance Simple Earn Flexible/Locked product scanner (read-only API access)
+- Daily Earn/bonus summary and manual Telegram /earn command
+- Campaign headline filter excludes coupon/voucher-required offers when a verified RSS feed is configured
+- SQLite signal history
 - Telegram owner-only controls: /scan, /status, /history, /earn, /pause, /resume
 - No martingale, no averaging down, no withdrawal permission or withdrawal code
 
@@ -20,7 +23,9 @@ Telegram-controlled Binance market scanner. The initial release is **TESTNET-onl
 - Risk sizing is not approved until a verified account equity is configured; no fictional balance is assumed.
 - Spot and Futures signals are analytical alerts. This release does not yet place live or testnet orders.
 - It does not promise profits or loss-free trading.
-- Earn uses Binance production read-only Simple Earn API endpoints for product information; this is separate from Testnet trading. Configure a dedicated API key with read-only permission only. Never enable trading or withdrawals. Product listings do not guarantee your account or region is eligible.\n- No Earn subscription, redemption, transfer, order, or withdrawal is executed. You must review and act yourself.\n- Bonus campaign headlines are only scanned if a verified official HTTPS RSS feed is configured in BINANCE_ANNOUNCEMENTS_RSS_URL. Until then, bonus alerts are not active. Coupon/voucher-required offers are filtered out.
+- Earn uses Binance production read-only Simple Earn API endpoints for product information; this is separate from Testnet trading. Configure a dedicated API key with read-only permission only. Never enable trading or withdrawals. Product listings do not guarantee your account or region is eligible.
+- No Earn subscription, redemption, transfer, order, or withdrawal is executed. You must review and act yourself.
+- Bonus campaign headlines are only scanned if a verified official HTTPS RSS feed is configured in BINANCE_ANNOUNCEMENTS_RSS_URL. Until then, bonus alerts are not active. Coupon/voucher-required offers are filtered out.
 
 ## Run
 1. Create a Telegram bot with BotFather and keep its token private.
