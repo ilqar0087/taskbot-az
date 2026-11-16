@@ -33,6 +33,8 @@ SITES = [
     ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Yalnız real pul məbləği, açıq issue və təsdiqlənən orijinal mənbə olan bounty elanları."),
     ("FaucetPay", "https://faucetpay.io/", "Kripto mikro-cüzdanıdır; özü işəgötürən deyil. Faucet, PTC və offerwall tapşırıqları üçüncü tərəflərdən gəlir. Bot yalnız qaydaların açıq icazə verdiyi API-ləri avtomatlaşdıra bilər."),
     ("Algora", "https://algora.io/", "Açıq mənbə bounty-ləri. Pul mükafatı, uyğunluq və payout şərtlərini hər işdə yoxla."),
+    ("Jobicy", "https://jobicy.com/", "Uzaqdan iş elanları. Bot açıq API-dən elanları çəkir; ölkə uyğunluğu və maaşı yoxla."),
+    ("Remote OK", "https://remoteok.com/", "Uzaqdan iş elanları. Bot açıq feed-dən elanları çəkir; müraciət əl ilə edilir."),
 ]
 
 GITHUB_QUERIES = [
@@ -180,6 +182,74 @@ def fetch_github_bounties():
     unique = {item["url"]: item for item in found}
     return list(unique.values())[:40]
 
+
+def fetch_remote_job_feeds():
+    """Fetch public remote-job feeds; retain the original source URL and attribution."""
+    found = []
+    headers = {"User-Agent": "TaskWorkerAZ/2.1 (+https://github.com/ilqar0087/taskbot-az)", "Accept": "application/json"}
+
+    try:
+        req = urllib.request.Request("https://jobicy.com/api/v2/remote-jobs?count=50", headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        for job in payload.get("jobs", []):
+            title = (job.get("jobTitle") or "").strip()
+            url = job.get("url") or ""
+            if not title or not url.startswith("http"):
+                continue
+            location = job.get("jobGeo") or "Remote — dəqiqləşdir"
+            salary_min, salary_max = job.get("salaryMin"), job.get("salaryMax")
+            currency = job.get("salaryCurrency") or "USD"
+            salary = f"Maaş: {salary_min or '?'}–{salary_max or '?'} {currency}" if salary_min or salary_max else "Maaş: elanda göstərilməyib"
+            excerpt = job.get("jobExcerpt") or job.get("jobDescription") or ""
+            found.append({
+                "source": "Jobicy",
+                "title": f"{title} — {job.get('companyName') or 'Şirkət göstərilməyib'} [{location}]",
+                "url": url,
+                "reward": salary,
+                "eligibility": "REMOTE_JOB — ölkə uyğunluğu və müraciət şərtlərini yoxla",
+                "summary": "[Mənbə: Jobicy] " + re.sub(r"\s+", " ", excerpt).strip()[:450],
+                "updated": job.get("pubDate") or datetime.now(timezone.utc).isoformat(),
+            })
+    except Exception as exc:
+        log.warning("Jobicy feed failed: %s", type(exc).__name__)
+
+    # Remote OK's first JSON object contains its API usage/attribution notice.
+    try:
+        req = urllib.request.Request("https://remoteok.com/api", headers=headers)
+        with urllib.request.urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        for job in payload:
+            if not isinstance(job, dict) or not job.get("position") or not job.get("url"):
+                continue
+            url = job["url"]
+            if not url.startswith("http"):
+                continue
+            location = job.get("location") or "Remote — dəqiqləşdir"
+            low, high = job.get("salary_min"), job.get("salary_max")
+            salary = f"Maaş: \${low}–\${high}" if low or high else "Maaş: elanda göstərilməyib"
+            tags = ", ".join(job.get("tags") or [])
+            summary = (job.get("description") or "") + (f" | Etiketlər: {tags}" if tags else "")
+            found.append({
+                "source": "Remote OK",
+                "title": f"{job['position']} — {job.get('company') or 'Şirkət göstərilməyib'} [{location}]",
+                "url": url,
+                "reward": salary,
+                "eligibility": "REMOTE_JOB — ölkə uyğunluğu və müraciət şərtlərini yoxla",
+                "summary": "[Mənbə: Remote OK] " + re.sub(r"<[^>]+>", " ", re.sub(r"\s+", " ", summary)).strip()[:450],
+                "updated": job.get("date") or datetime.now(timezone.utc).isoformat(),
+            })
+    except Exception as exc:
+        log.warning("Remote OK feed failed: %s", type(exc).__name__)
+
+    unique = {item["url"]: item for item in found}
+    return list(unique.values())[:80]
+
+
+def fetch_all_opportunities():
+    return fetch_github_bounties() + fetch_remote_job_feeds()
+
+
 def save_opportunities(items):
     new_items = []
     with connect() as db:
@@ -206,7 +276,7 @@ async def private_only(update):
 async def scheduled_scan(app):
     while True:
         try:
-            items = await asyncio.to_thread(fetch_github_bounties)
+            items = await asyncio.to_thread(fetch_all_opportunities)
             new_items = await asyncio.to_thread(save_opportunities, items)
             if OWNER and new_items:
                 lines = ["🆕 Yeni açıq bounty elanları:"]
@@ -250,14 +320,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Task Worker AZ\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
-        "/scan — açıq bounty tapşırıqlarını axtar\n"
+        "/scan — bounty və uzaqdan iş elanlarını axtar\n"
         "/tasks — tapşırıq mənbələri\n"
         "/opportunities — tapılmış elanlar\n"
         "/view ID — elan təfərrüatı\n"
         "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
         "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
         "/balance — real gəlir\n/history — tarixçə\n/faucet — FaucetPay məlumatı\n/id — Telegram ID\n\n"
-        "DEMO: sınaq və elan baxışı. REAL: cari açıq elanlar; müraciət və işi tamamlamaq üçün sahib təsdiqi tələb olunur.",
+        "DEMO: sınaq və elan baxışı. REAL: bounty və uzaqdan iş elanları; müraciət və iş icrası üçün insan təsdiqi tələb olunur.",
         reply_markup=mode_keyboard(mode)
     )
 
@@ -270,7 +340,7 @@ async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         label = "🧪 DEMO rejimi seçildi. Heç bir müraciət və iş icrası edilmir."
     elif query.data == "task_mode_real":
         context.user_data["task_mode"] = "real"
-        label = ("🚀 REAL rejimi seçildi. Bot cari açıq elanları axtarır. "
+        label = ("🚀 REAL rejimi seçildi. Bot bounty və uzaqdan iş elanlarını axtarır. "
                  "Platformaya müraciət və ödəniş addımları avtomatik edilmir; elan şərtləri və işə başlamaq sənin təsdiqini tələb edir.")
     else:
         return
@@ -287,7 +357,7 @@ async def tasks(update, context):
     lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
     lines += [f"\n{i}. {name}\n{note}\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
     lines.append("\nAzərbaycanda qeydiyyat və pul çıxarışı hər hesabda fərqli ola bilər. İşə başlamazdan əvvəl payout metodunu yoxla. İş almaq üçün heç bir sayta depozit ödəmə.")
-    lines.append("GitHub skanında yalnız açıq, orijinalı təsdiqlənmiş, icraçıya verilməmiş və rəqəmlə göstərilən USD/USDC mükafatlı elanlar göstərilir. Token və qeyri-müəyyən mükafatlar çıxarılır.")
+    lines.append("Bot GitHub-da təsdiqlənən nağd bounty-ləri, Jobicy və Remote OK uzaqdan iş elanlarını axtarır. Elanlar mənbəyə keçidlə göstərilir; müraciət və işi görmək insan təsdiqi tələb edir.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
  
@@ -327,7 +397,7 @@ async def opportunities(update, context):
         return
     lines = ["Tapılmış açıq elanlar:"]
     for row in rows:
-        lines.append(f"\nID {row['id']}: {row['title']}\nMükafat: {row['reward']}\nİcazə: {row['eligibility']}\n{row['url']}")
+        lines.append(f"\nID {row['id']}: {row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n{row['url']}")
     lines.append("\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
