@@ -18,7 +18,19 @@ SITES=[
 ("Upwork","https://www.upwork.com/","Freelance layihələr; müştəri təsdiqi tələb olunur."),
 ("make.fun","https://make.fun/","AI agentlər üçün kod yarışmaları; yalnız pulsuz girişli bountylər seçilməlidir. Qazanc yalnız qalib olduqda USDC/Solana ilədir."),
 ("Clustly","https://www.clustly.ai/","AI agent xidməti yerləşdirib müştəri sifarişi almaq; ödəniş USDC/Solana escrow-dadır və müştəri təsdiqi tələb olunur."),
-("Superteam Earn","https://superteam.fun/earn","Yalnız agentlərə açıq (AGENT_ALLOWED/AGENT_ONLY) elanlar izlənməlidir; insan üçün olan elanlara bot müraciət etməməlidir.")
+("Superteam Earn","https://superteam.fun/earn","Yalnız agentlərə açıq (AGENT_ALLOWED/AGENT_ONLY) elanlar izlənməlidir; insan üçün olan elanlara bot müraciət etməməlidir."),
+("BasedAgents","https://basedagents.ai/","AI agentlər üçün tapşırıq bazarı; qəbul edilən işə görə USDC ödənişi. Əsas şəbəkə Base-dir, Solana deyil; müştəri qəbul etməlidir."),
+("TaskMarket / Daydreams","https://taskmarket.dev/","AI agentlər üçün escrow-li tapşırıqlar; qəbul edilən işə görə USDC (Base) və ya dəstəklənən digər şəbəkə. Bəzi əməliyyatlar ödəniş tələb edə bilər."),
+("AgentBounties","https://agentbounties.app/","AI agentlər üçün yoxlanıla bilən nəticə mükafatları; USDC, əsasən Base ekosistemi. Yalnız real escrow və pulsuz iştirak olanları seç."),
+("BaseBounty","https://www.basebounty.app/","AI agentlər və insanlar üçün Base şəbəkəsində USDC mükafatlı tapşırıqlar; kəşfiyyat üçün ödənişli əməliyyat ola bilər."),
+("AgentHansa","https://www.agenthansa.com/","AI agentlər üçün quest və kommersiya tapşırıqları; qeydiyyat, tapşırıq şərtləri və mükafat növü ayrıca yoxlanmalıdır."),
+("Jobbi Agent Gigs","https://jobbi.org/gigs/report/","AI agentlər üçün müxtəlif bounty lövhələrini toplayan kataloqdur; özü ödəniş etmir, yalnız tapşırıq mənbələrini tapmağa kömək edir."),
+("Algora","https://algora.io/","Açıq mənbə proqramlaşdırma issue-ləri üçün mükafatlar; agent kod hazırlamağa kömək edə bilər, amma GitHub PR və ödəniş qaydaları insan nəzarəti tələb edə bilər."),
+("Clickworker","https://www.clickworker.com/clickworker/","İnsan hesabı ilə mikrotapşırıqlar; avtomatik botla klikləmək və təqdim etmək olmaz."),
+("Toloka","https://toloka.ai/tolokers/","İnsan tərəfindən yerinə yetirilməli tapşırıqlar; AI yalnız tapşırıq qaydaları açıq icazə verəndə kömək edə bilər."),
+("SproutGigs","https://sproutgigs.com/","İnsan tərəfindən görülən mikroişlər; bot, skript və avtomatik sübut təqdimatı qadağandır."),
+("Fiverr","https://www.fiverr.com/","Xidmət satışı; profil, müştəri ünsiyyəti və sifariş təsdiqi insan nəzarəti ilə olmalıdır."),
+("Upwork","https://www.upwork.com/","Freelance layihələr; təklif və müştəri ünsiyyəti insan təsdiqi ilə, platforma qaydalarına uyğun aparılmalıdır.")
 ]
 def connect():
  Path(DB).parent.mkdir(parents=True,exist_ok=True)
