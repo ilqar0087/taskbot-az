@@ -28,6 +28,7 @@ SITES = [
     ("Upwork", "https://www.upwork.com/", "Beynəlxalq freelance layihələr. Komissiya və Azərbaycanda işləyən çıxarış üsulunu əvvəlcədən yoxla."),
     ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı. Sifarişlər insan təsdiqi ilə; Azərbaycanda işləyən çıxarış metodunu yoxla."),
     ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Yalnız real pul məbləği, açıq issue və təsdiqlənən orijinal mənbə olan bounty elanları."),
+    ("FaucetPay", "https://faucetpay.io/", "Kripto mikro-cüzdanıdır; özü işəgötürən deyil. Faucet, PTC və offerwall tapşırıqları üçüncü tərəflərdən gəlir. Bot yalnız qaydaların açıq icazə verdiyi API-ləri avtomatlaşdıra bilər."),
     ("Algora", "https://algora.io/", "Açıq mənbə bounty-ləri. Pul mükafatı, uyğunluq və payout şərtlərini hər işdə yoxla."),
 ]
 
@@ -276,6 +277,19 @@ async def tasks(update, context):
     lines.append("GitHub skanında yalnız açıq, orijinalı təsdiqlənmiş, icraçıya verilməmiş və rəqəmlə göstərilən USD/USDC mükafatlı elanlar göstərilir. Token və qeyri-müəyyən mükafatlar çıxarılır.")
     await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
 
+ 
+async def faucet(update, context):
+    if not await private_only(update):
+        return
+    await update.message.reply_text(
+        "FaucetPay: https://faucetpay.io/\n\n"
+        "FaucetPay özü işəgötürən deyil, kripto mikro-cüzdandır. Qazanc faucet, PTC reklamları və offerwall tərəfdaşlarının tapşırıqlarından gəlir.\n"
+        "Hesabında Faucet List, PTC Ads və Offerwall bölmələrini yoxla.\n\n"
+        "Bot CAPTCHA, reklam baxışı və ya saytın qadağan etdiyi claim-ləri avtomatik etməyəcək. Yalnız rəsmi API və konkret tapşırıq qaydaları avtomatlaşdırmaya açıq icazə verəndə icra modulu qoşulacaq.\n"
+        "FaucetPay bank hesabına birbaşa çıxarış etmir; kripto cüzdana çıxarış, minimum və şəbəkə haqqı tətbiq olunur.",
+        disable_web_page_preview=True
+    )
+
 
 async def scan(update, context):
     if not await private_only(update):
@@ -395,7 +409,7 @@ def main():
     app = Application.builder().token(TOKEN).post_init(post_init).build()
     for name, handler in [
         ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
-        ("opportunities", opportunities), ("view", view), ("done", done),
+        ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
         app.add_handler(CommandHandler(name, handler))
