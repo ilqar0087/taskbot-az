@@ -923,11 +923,20 @@ async def creative_request(update, context, kind):
             )
         return
 
+    if kind == "cartoon":
+        fallback = ("🎬 CİZGİ FİLMİ SSENARİSİ\\nMövzu: " + idea +
+                    "\\n1. Giriş: qəhrəman sirli hadisə ilə qarşılaşır.\\n2. Macəra: yeni dost tapır və maneəni aşır.\\n3. Həll: ağıllı qərarla problemi həll edir.\\n4. Final: dostluq və cəsarət mesajı.")
+    elif kind == "ad":
+        fallback = ("📢 REKLAM SSENARİSİ\\nMəhsul: " + idea +
+                    "\\n0–3 san: diqqətçəkən giriş.\\n3–8 san: məhsulu göstər.\\n8–15 san: üstünlükləri dürüst təqdim et.\\n15–20 san: əlaqə/alış çağırışı.")
+    elif kind == "song":
+        fallback = ("🎵 MAHNI MƏTNİ\\nMövzu: " + idea +
+                    "\\n[Verse] Yeni səhər, yeni ümid,\\nArzularım mənimlədir.\\n[Chorus] Gəl, birlikdə oxuyaq,\\nSevincimizi paylaşaq!")
+    else:
+        fallback = ("🖼️ ŞƏKİL PROMPTU\\nCreate a beautiful, high-quality illustration of " + idea +
+                    ", vivid colors, detailed composition, cinematic soft lighting, family-friendly, no text, no watermark.")
     await update.message.reply_text(
-        "🎨 Yaradıcı Studio hazırdır, amma media API açarı hələ qoşulmayıb.\n"
-        "Railway-də FAL_KEY dəyişənini əlavə etdikdən sonra bu əmr hazır fayl yarada biləcək.\n\n"
-        "Mövzu: " + idea + "\n"
-        "Dəstəklənən nəticələr: /cartoon — MP4, /ad — MP4, /song — MP3, /image — PNG."
+        fallback + "\\n\\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/MP3/PNG faylı üçün Railway-də FAL_KEY əlavə edilməlidir."
     )
 
 
