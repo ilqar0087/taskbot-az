@@ -421,6 +421,45 @@ async def view(update, context):
         disable_web_page_preview=True)
 
 
+
+async def prepare(update, context):
+    if not await private_only(update):
+        return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("İstifadə: /prepare ID")
+        return
+    with connect() as db:
+        row = db.execute("SELECT * FROM opportunities WHERE id=?", (int(context.args[0]),)).fetchone()
+    if not row:
+        await update.message.reply_text("Elan tapılmadı. /scan ilə siyahını yenilə.")
+        return
+    title = row["title"]
+    summary = re.sub(r"\\s+", " ", row["summary"] or "").strip()
+    if len(summary) > 650:
+        summary = summary[:650] + "…"
+    draft = (
+        "Müraciət mətni — göndərməzdən əvvəl öz təcrübənə uyğun redaktə et:\\n\\n"
+        "Salam!\\n\\n"
+        f"“{title}” elanı ilə maraqlanıram. Tapşırığın tələblərini nəzərdən keçirməyə və "
+        "razılaşdırılmış müddətdə keyfiyyətli nəticə təqdim etməyə hazıram.\\n\\n"
+        "İşə başlamazdan əvvəl gözlənilən nəticəni, qəbul meyarlarını, son tarixi və ödəniş "
+        "qaydalarını dəqiqləşdirmək istərdim. AI alətlərindən istifadə yalnız elan və platforma "
+        "qaydaları buna açıq icazə verərsə mümkün olacaq.\\n\\n"
+        "Mənim uyğun təcrübəm: [öz real təcrübəni burada yaz].\\n"
+        "Təşəkkür edirəm."
+    )
+    await update.message.reply_text(
+        f"📄 Elan #{row['id']} üçün müraciət layihəsi\\n"
+        f"Mənbə: {row['source']}\\nÖdəniş: {row['reward']}\\n"
+        f"Uyğunluq: {row['eligibility']}\\n\\n"
+        f"Elan xülasəsi: {summary}\\n\\n{draft}\\n\\n"
+        f"Orijinal elan: {row['url']}\\n\\n"
+        "Bu layihə avtomatik göndərilmir. Təcrübə hissəsini yalnız doğru məlumatla doldur və "
+        "müraciəti platformanın özündə özün təsdiqlə.",
+        disable_web_page_preview=True
+    )
+
+
 async def done(update, context):
     if not await private_only(update):
         return
@@ -492,7 +531,7 @@ def main():
     app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
     for name, handler in [
         ("start", start), ("id", myid), ("tasks", tasks), ("scan", scan),
-        ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("done", done),
+        ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
         ("paid", paid), ("balance", balance), ("history", history)
     ]:
         app.add_handler(CommandHandler(name, handler))
