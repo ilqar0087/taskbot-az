@@ -29,7 +29,7 @@ Telegram-controlled Binance market scanner. The initial release is **TESTNET-onl
 
 ## Run
 1. Create a Telegram bot with BotFather and keep its token private.
-2. Copy `.env.example` to `.env`, fill `TELEGRAM_BOT_TOKEN` and your Telegram numeric ID. For Earn product listings, optionally add a separate Binance API key with **read-only permission only**; never enable trading or withdrawals.
+2. Copy `.env.example` to `.env`, fill `TELEGRAM_BOT_TOKEN` and your Telegram numeric ID. For Earn product listings, optionally add separate `BINANCE_EARN_API_KEY` and `BINANCE_EARN_API_SECRET` values from a Binance MAINNET key with **read-only permission only**. Do not reuse Testnet keys; never enable trading or withdrawals.
 3. Install requirements and run `python main.py`.
 4. For Railway, set the same environment variables in the service settings. Mount a persistent volume at `/data`.
 
