@@ -407,8 +407,33 @@ def fetch_remote_job_feeds():
     return list(unique.values())[:80]
 
 
+def fetch_mobile_platform_leads():
+    """Show real platform entry points separately from verified job vacancies."""
+    selected = (
+        "Jwuma / Corpshore — Azərbaycan AI tapşırıqları",
+        "Wake — telefonla video çəkilişi (Android/iOS)",
+        "Crowtado — telefonla foto, video və audio tapşırıqları",
+        "KLKT / CNTXT AI — Android data tapşırıqları",
+    )
+    found = []
+    for lead in AZERBAIJAN_LEADS:
+        if lead["name"] not in selected:
+            continue
+        found.append({
+            "source": "Platforma",
+            "title": lead["name"],
+            "url": lead["url"],
+            "reward": "Ödəniş: hesabda və aktiv tapşırıqda yoxlanmalıdır",
+            "eligibility": "PLATFORM_LEAD — Azərbaycan üzrə qəbul, aktiv tapşırıq və payout təsdiqlənməlidir",
+            "summary": lead["status"] + " " + lead["details"],
+            "updated": datetime.now(timezone.utc).isoformat(),
+        })
+    return found
+
+
 def fetch_all_opportunities():
-    return fetch_github_bounties() + fetch_remote_job_feeds()
+    # Platform links are useful even when public job feeds contain no matching mobile roles.
+    return fetch_mobile_platform_leads() + fetch_github_bounties() + fetch_remote_job_feeds()
 
 
 def save_opportunities(items):
@@ -443,7 +468,7 @@ async def scheduled_scan(app):
             items = await asyncio.to_thread(fetch_all_opportunities)
             new_items = await asyncio.to_thread(save_opportunities, items)
             if OWNER and new_items:
-                lines = ["🆕 Yeni açıq bounty elanları:"]
+                lines = ["🆕 Yeni iş və tapşırıq imkanları:"]
                 for item in new_items[:8]:
                     lines.append(f"\n• {item['title']}\n{item['reward']} | {item['eligibility']}\n{item['url']}")
                 await app.bot.send_message(chat_id=int(OWNER), text="\n".join(lines), disable_web_page_preview=True)
@@ -484,7 +509,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Task Worker AZ\n"
         f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
-        "/scan — bounty və uzaqdan iş elanlarını axtar\n"
+        "/scan — iş elanları və mobil tapşırıq platformalarını axtar\n"
         "/tasks — tapşırıq mənbələri\n"
         "/opportunities — tapılmış elanlar\n"
         "/view ID — elan təfərrüatı\n"
@@ -581,8 +606,9 @@ async def scan(update, context):
         items = await asyncio.to_thread(fetch_all_opportunities)
         await asyncio.to_thread(save_opportunities, items)
         await update.message.reply_text(
-            f"Yoxlama bitdi: {len(items)} uyğun elan tapıldı. "
-            "Filtr: Azərbaycan/Worldwide + başlanğıc səviyyə + telefonla görülən tapşırıq. "
+            f"Yoxlama bitdi: {len(items)} imkan tapıldı (mobil platformalar ayrıca göstərilir). "
+            "Vakansiyalar ölkə, təcrübə və cihaz tələblərinə görə süzülür. "
+            "Platforma linkləri iş zəmanəti deyil; aktiv tapşırıq və payout hesabda yoxlanmalıdır. "
             "Bounty üçün açıq AI icazəsi və escrow təsdiqi tələb olunur. /opportunities yaz.")
     except Exception as exc:
         log.exception("Task scan failed")
@@ -597,7 +623,7 @@ async def opportunities(update, context):
     if not rows:
         await update.message.reply_text("Hələ elan tapılmayıb. Əvvəl /scan yaz.")
         return
-    lines = ["Sənin filtrlərinə uyğun açıq elanlar (AZ/Worldwide • mobil • başlanğıc):"]
+    lines = ["İş elanları və mobil tapşırıq platformaları (statusu ayrıca yoxla):"]
     for row in rows:
         lines.append(f"\nID {row['id']}: {row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n{row['url']}")
     lines.append("\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
