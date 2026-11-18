@@ -23,6 +23,8 @@ APPS = {
     "task": ("Task Worker AZ tapşırıqları", 0),
 }
 BTC_ADDRESS_RE = re.compile(r"^(bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$")
+PROFILE_SERIES_COUNT = 64
+DAILY_AD_TARGET_PER_PROFILE = sum(APPS[k][1] for k in ("gold", "arctic", "lumber"))
 
 def now_local():
     return datetime.now(timezone(timedelta(hours=4))).isoformat(timespec="seconds")
@@ -101,7 +103,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🤖 TASK WORKER AZ — QAZANC İZLƏYİCİ\n\n"
         "Tətbiqlər: Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşırıqları.\n"
-        "Gündəlik hədəf: 25 + 25 + 24 = 74 reklam (hədəfdir, məcburi limit deyil).\n"
+        "Gündəlik hədəf: hər Gmail üçün 25 + 25 + 24 = 74 reklam.\n"
+        "64 Gmail profili üçün ümumi hədəf: 4 736 reklam/gün.\n"
         "BTC və Lightning ünvanları ayrıca saxlanılır. Qazanc və çıxarışlar əl ilə qeyd olunur.\n\n"
         "/apps — tətbiqlər və hədəflər\n"
         "/email add email@gmail.com — e-poçt profili əlavə et\n"
@@ -130,11 +133,21 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def apps(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await allowed(update):
         return
-    lines = ["📋 TƏTBİQLƏR VƏ GÜNDƏLİK HƏDƏFLƏR"]
-    for key, (name, target) in APPS.items():
-        target_text = f"{target} reklam" if target else "tapşırıq qeydi"
-        lines.append(f"• {name} — {target_text} (dəyişən hədəf)")
-    lines.append("\nHədəflər plan üçündür. Faktiki reklam sayı və mükafat tətbiqin özündə təsdiqlənməlidir.")
+    with connect() as db:
+        profile_count = db.execute("SELECT COUNT(*) FROM tracker_email_accounts").fetchone()[0]
+    lines = [
+        "📋 TƏTBİQLƏR VƏ GÜNDƏLİK HƏDƏFLƏR",
+        f"Bir Gmail profili üçün: {DAILY_AD_TARGET_PER_PROFILE} reklam/gün",
+        f"64 Gmail profili üçün plan: {DAILY_AD_TARGET_PER_PROFILE * PROFILE_SERIES_COUNT:,} reklam/gün",
+        f"Botda qeydiyyatda olan profillər: {profile_count}",
+        "",
+    ]
+    for key in ("gold", "arctic", "lumber"):
+        name, target = APPS[key]
+        lines.append(f"• {name}: {target} × {PROFILE_SERIES_COUNT} = {target * PROFILE_SERIES_COUNT:,} reklam/gün")
+    lines.append("• Task Worker AZ tapşırıqları: ayrıca qazanc qeydi")
+    lines.append("\nÜmumi plan: 4 736 reklam/gün (64 Gmail × 74 reklam).")
+    lines.append("Hədəflər plan üçündür; faktiki reklam sayı, limitlər və mükafat tətbiqin özündə təsdiqlənməlidir.")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def email_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -313,16 +326,35 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     day = datetime.now(timezone(timedelta(hours=4))).date().isoformat()
     with connect() as db:
+        profile_count = db.execute("SELECT COUNT(*) FROM tracker_email_accounts").fetchone()[0]
         rows = db.execute(
             "SELECT app_key,SUM(satoshis) AS sats,SUM(ads_count) AS ads,COUNT(*) AS entries "
             "FROM tracker_earnings WHERE substr(created,1,10)=? GROUP BY app_key ORDER BY app_key", (day,)
         ).fetchall()
-    if not rows:
-        await update.effective_message.reply_text("Bu gün hələ qazanc qeydi yoxdur.")
-        return
-    lines = ["📅 BUGÜNKÜ QEYDLƏR"]
-    for r in rows:
-        lines.append(f"• {APPS[r['app_key']][0]}: {r['sats']:,} satoshi, {r['ads']} reklam, {r['entries']} qeyd")
+    by_app = {r["app_key"]: r for r in rows}
+    lines = [
+        "📅 BUGÜNKÜ QEYDLƏR",
+        f"Profil sayı: {profile_count}",
+        f"Ümumi reklam hədəfi (64 Gmail): {DAILY_AD_TARGET_PER_PROFILE * PROFILE_SERIES_COUNT:,}",
+    ]
+    total_ads = 0
+    total_sats = 0
+    for key in ("gold", "arctic", "lumber"):
+        r = by_app.get(key)
+        ads = int(r["ads"] or 0) if r else 0
+        sats = int(r["sats"] or 0) if r else 0
+        entries = int(r["entries"] or 0) if r else 0
+        target = APPS[key][1] * PROFILE_SERIES_COUNT
+        total_ads += ads
+        total_sats += sats
+        lines.append(f"• {APPS[key][0]}: {ads:,}/{target:,} reklam | {sats:,} sat | {entries} qeyd")
+    task = by_app.get("task")
+    if task:
+        lines.append(f"• Task Worker AZ: {int(task['sats'] or 0):,} sat | {int(task['entries'] or 0)} qeyd")
+        total_sats += int(task["sats"] or 0)
+    lines.append(f"\nCəmi reklam: {total_ads:,}/4 736")
+    lines.append(f"Cəmi qeyd edilmiş qazanc: {total_sats:,} satoshi")
+    lines.append("Bu göstəricilər əl ilə daxil edilən qeydlərdir; tətbiqlərdən avtomatik oxunmur.")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
