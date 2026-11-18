@@ -1,24 +1,37 @@
-# Task Worker AZ
+# Task Worker AZ — Qazanc İzləyicisi
 
-Telegram assistant for discovering public open-source bounty issues, listing work platforms, and tracking work notes and payments.
+Telegram botu Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşırıqlarından istifadəçinin əl ilə təsdiqlədiyi qazancı, reklam sayını və çıxarış tarixçəsini qeyd edir.
 
-## Telegram commands
-- `/start`, `/id`
-- `/scan` — searches public GitHub issues for open bounty/reward opportunities; automatic background scan runs every 6 hours and sends only new matches to the owner
-- `/opportunities` — shows discovered issues
-- `/view ID` — shows details, reward hints, and AI-eligibility classification
-- `/prepare ID` — prepares an editable application draft without inventing the applicant's experience or sending it automatically
-- `/tasks` — lists other task marketplaces
-- `/done ID note`, `/paid ID amount note`, `/balance`, `/history`
+## Tətbiqlər və gündəlik plan
+- Gold Diggers — 25 reklam hədəfi
+- Arctic Rush — 25 reklam hədəfi
+- Lumberjack — 24 reklam hədəfi
+- Cəmi plan: 74 reklam/gün. Bu sərt limit deyil; faktiki say tətbiqin icazə verdiyi həddə görə dəyişir.
+- Task Worker AZ tapşırıqları ayrıca qazanc mənbəyidir.
 
-## Railway variables
-- `TELEGRAM_BOT_TOKEN` — private Telegram token
-- `OWNER_TELEGRAM_ID` — owner's numeric Telegram ID
-- `DATABASE_PATH` — use `/data/taskbot.sqlite3` with a persistent volume mounted at `/data`
+## Telegram komandaları
+- `/start`, `/help` — kömək
+- `/apps` — tətbiqlər və hədəflər
+- `/email add email@gmail.com` — e-poçt profilini əlavə et
+- `/email list` — profilləri göstər
+- `/record gold 1 120 20 qeyd` — profil 1 üçün 120 satoshi və 20 reklam qeydi
+- `/record task - 500 0 tapşırıq` — Task Worker AZ qazanc qeydi
+- `/balance` — qeyd edilmiş qazanc və çıxarış cəmi
+- `/today` — bugünkü qeydlər
+- `/wallet set BTC_ADDRESS` — tək BTC qəbul ünvanı
+- `/wallet` — ünvanı göstər
+- `/withdraw SATOSHI TXID` — artıq edilmiş çıxarışı qeyd et
+- `/history` — tarixçə
 
-## Important limitations
-- The first live scanner queries GitHub's public Search API; other listed platforms are directory links, not authenticated integrations.
-- The bot discovers opportunities and tracks actual payments. It does not create marketplace accounts, submit proposals, click through human-only tasks, or claim work is complete.
-- AI-agent permission must be verified in each bounty's own rules. An automated text classifier is only a hint, not proof of permission.
-- No income is guaranteed. The balance records only payments the owner manually confirms as received.
-- Never pay an upfront fee or connect a wallet to an unverified bounty. Human review is required before starting or submitting any work.
+## Railway dəyişənləri
+- `BOT_TOKEN` və ya `TELEGRAM_BOT_TOKEN`
+- `OWNER_TELEGRAM_ID` — yalnız sahibin Telegram ID-si
+- `DATABASE_PATH=/data/taskbot.sqlite3` — persistent volume
+
+## Təhlükəsizlik və məhdudiyyətlər
+- Bot reklam açmır, videoya baxmır, klik etmir, hesablar arasında avtomatik giriş etmir və CAPTCHA keçmir.
+- Çoxsaylı hesablar yalnız tətbiqin qaydaları buna açıq icazə verirsə istifadə edilməlidir.
+- E-poçt ünvanları yalnız profil etiketi kimi saxlanılır. Gmail parolu, OTP, seed phrase və private key istənilmir və saxlanılmır.
+- Bot BTC köçürməsi etmir. Yalnız bir ümumi qəbul ünvanını saxlayır və istifadəçinin artıq etdiyi çıxarışı TXID ilə qeyd edir.
+- Balans yalnız istifadəçinin daxil etdiyi qeydlərin cəmidir; real tətbiq və blokçeyn balansı deyil.
+- Mövcud SQLite faylı və köhnə cədvəllər silinmir; yeni izləyici cədvəlləri ayrıca yaradılır.
