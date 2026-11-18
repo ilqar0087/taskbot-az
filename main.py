@@ -70,6 +70,7 @@ def init_db():
             address TEXT NOT NULL,
             updated TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS tracker_app_withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, app_key TEXT NOT NULL, satoshis INTEGER NOT NULL CHECK(satoshis >= 20), reference TEXT NOT NULL, created TEXT NOT NULL, FOREIGN KEY(account_id) REFERENCES tracker_email_accounts(id));
         CREATE TABLE IF NOT EXISTS tracker_withdrawals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             satoshis INTEGER NOT NULL CHECK(satoshis > 0),
@@ -115,6 +116,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/wallet set BTC_UNVANI — Bitcoin ünvanını yaz\n"
         "/lightning — Lightning ünvanına bax\n"
         "/lightning set EMAIL@DOMAIN — Lightning ünvanını yaz\n"
+        "/ready — 20 satoshi həddinə çatanlar\n"
+        "/withdrawapp ID gold|arctic|lumber 20 QEBZ — real çıxarışı qeyd et\n"
         "/withdraw SATOSHI TXID — edilmiş çıxarışı qeyd et\n"
         "/history — tarixçə\n"
         "/help — kömək"
@@ -377,6 +380,35 @@ async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.execute("INSERT INTO tracker_withdrawals(satoshis,txid,created) VALUES(?,?,?)", (sats, txid, now_local()))
     await update.effective_message.reply_text(f"Çıxarış qeydə alındı: {sats:,} satoshi. TXID: {txid}")
 
+async def ready_withdrawals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update): return
+    with connect() as db:
+        rows = db.execute("SELECT a.id,a.email,e.app_key,COALESCE(SUM(e.satoshis),0)-COALESCE((SELECT SUM(w.satoshis) FROM tracker_app_withdrawals w WHERE w.account_id=a.id AND w.app_key=e.app_key),0) AS available FROM tracker_email_accounts a JOIN tracker_earnings e ON e.account_id=a.id WHERE e.app_key IN ('gold','arctic','lumber') GROUP BY a.id,a.email,e.app_key HAVING available >= 20 ORDER BY a.id,e.app_key").fetchall()
+    if not rows:
+        await update.effective_message.reply_text("Hələ 20 satoshi həddinə çatan profil yoxdur."); return
+    lines = ["⚡ 20 SATOSHI HƏDDİNƏ ÇATANLAR", "Bu siyahı çıxarışa hazır balansı göstərir; pul avtomatik göndərilmir."]
+    for r in rows: lines.append(f"#{r['id']} {r['email']} | {APPS[r['app_key']][0]}: {r['available']} sat")
+    await update.effective_message.reply_text("\n".join(lines))
+
+async def app_withdrawal_record(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update): return
+    args = context.args
+    if len(args) != 4:
+        await update.effective_message.reply_text("İstifadə: /withdrawapp EMAIL_ID gold|arctic|lumber SATOSHI QEBZ — yalnız real çıxarışdan sonra."); return
+    try:
+        account_id, app_key, sats, reference = int(args[0]), args[1].lower(), int(args[2]), args[3].strip()
+        if app_key not in ('gold','arctic','lumber') or sats < 20 or len(reference) < 3: raise ValueError
+    except ValueError:
+        await update.effective_message.reply_text("Məlumat düzgün deyil; minimum 20 satoshi və qəbz istinadı lazımdır."); return
+    with connect() as db:
+        email = db.execute("SELECT email FROM tracker_email_accounts WHERE id=?", (account_id,)).fetchone()
+        earned = db.execute("SELECT COALESCE(SUM(satoshis),0) FROM tracker_earnings WHERE account_id=? AND app_key=?", (account_id,app_key)).fetchone()[0]
+        withdrawn = db.execute("SELECT COALESCE(SUM(satoshis),0) FROM tracker_app_withdrawals WHERE account_id=? AND app_key=?", (account_id,app_key)).fetchone()[0]
+        if not email or sats > earned-withdrawn:
+            await update.effective_message.reply_text("Profil yoxdur və ya qeydiyyat balansı kifayət etmir."); return
+        db.execute("INSERT INTO tracker_app_withdrawals(account_id,app_key,satoshis,reference,created) VALUES(?,?,?,?,?)", (account_id,app_key,sats,reference,now_local()))
+    await update.effective_message.reply_text(f"Çıxarış qeydə alındı: {email['email']} — {sats} satoshi. Bu qeyd pul köçürmür.")
+
 async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await allowed(update):
         return
@@ -407,7 +439,7 @@ def main():
     for command, handler in [
         ("start", start), ("help", help_cmd), ("apps", apps), ("email", email_cmd), ("appstatus", appstatus),
         ("record", record), ("balance", balance), ("today", today), ("wallet", wallet),
-        ("lightning", lightning), ("withdraw", withdraw), ("history", history),
+        ("lightning", lightning), ("withdraw", withdraw), ("ready", ready_withdrawals), ("withdrawapp", app_withdrawal_record), ("history", history),
     ]:
         app.add_handler(CommandHandler(command, handler))
     log.info("Task Worker AZ earnings tracker started")
