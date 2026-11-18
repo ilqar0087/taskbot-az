@@ -14,6 +14,8 @@ Telegram botu Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşır�
 - `/apps` — tətbiqlər və hədəflər
 - `/email add email@gmail.com` — e-poçt profilini əlavə et
 - `/email list` — profilləri göstər
+- `/appstatus set 1 gold active` — profil 1 üçün Gold Diggers qeydiyyat statusunu aktiv kimi qeyd et
+- `/appstatus list 1` — profil 1-in üç tətbiq üzrə statuslarını göstər
 - `/record gold 1 120 20 qeyd` — profil 1 üçün 120 satoshi və 20 reklam qeydi
 - `/record task - 500 0 tapşırıq` — Task Worker AZ qazanc qeydi
 - `/balance` — qeyd edilmiş qazanc və çıxarış cəmi
@@ -32,6 +34,7 @@ Telegram botu Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşır�
 - Bot reklam açmır, videoya baxmır, klik etmir, hesablar arasında avtomatik giriş etmir və CAPTCHA keçmir.
 - Çoxsaylı hesablar yalnız tətbiqin qaydaları buna açıq icazə verirsə istifadə edilməlidir.
 - E-poçt ünvanları yalnız profil etiketi kimi saxlanılır. Gmail parolu, OTP, seed phrase və private key istənilmir və saxlanılmır.
+- Tətbiq statusları yalnız istifadəçinin əl ilə daxil etdiyi uçot qeydləridir; hesab yaratma və tətbiqə giriş avtomatlaşdırılmır.
 - Bot BTC köçürməsi etmir. Yalnız bir ümumi qəbul ünvanını saxlayır və istifadəçinin artıq etdiyi çıxarışı TXID ilə qeyd edir.
 - Balans yalnız istifadəçinin daxil etdiyi qeydlərin cəmidir; real tətbiq və blokçeyn balansı deyil.
 - Mövcud SQLite faylı və köhnə cədvəllər silinmir; yeni izləyici cədvəlləri ayrıca yaradılır.
