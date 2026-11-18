@@ -42,6 +42,14 @@ def init_db():
             email TEXT NOT NULL UNIQUE COLLATE NOCASE,
             created TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS tracker_app_status (
+            account_id INTEGER NOT NULL,
+            app_key TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            updated TEXT NOT NULL,
+            PRIMARY KEY(account_id, app_key),
+            FOREIGN KEY(account_id) REFERENCES tracker_email_accounts(id)
+        );
         CREATE TABLE IF NOT EXISTS tracker_earnings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             app_key TEXT NOT NULL,
@@ -92,6 +100,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/apps — tətbiqlər və hədəflər\n"
         "/email add email@gmail.com — e-poçt profili əlavə et\n"
         "/email list — profilləri göstər\n"
+        "/appstatus set 1 gold active — profilin tətbiq statusunu qeyd et\n"
+        "/appstatus list 1 — profilin tətbiq statuslarını göstər\n"
         "/record gold 1 120 20 qeyd — 120 satoshi və 20 reklamı qeyd et\n"
         "/record task - 500 0 tapşırıq qazancı\n"
         "/balance — ümumi balans\n"
@@ -145,6 +155,72 @@ async def email_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("Bu e-poçt artıq siyahıdadır.")
         return
     await update.effective_message.reply_text("İstifadə: /email add email@gmail.com və ya /email list")
+
+
+async def appstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    args = context.args
+    if not args:
+        await update.effective_message.reply_text(
+            "İstifadə: /appstatus set EMAIL_ID gold|arctic|lumber active|pending|unavailable|closed\n"
+            "və ya: /appstatus list EMAIL_ID"
+        )
+        return
+    action = args[0].lower()
+    if action == "set" and len(args) == 4:
+        try:
+            account_id = int(args[1])
+        except ValueError:
+            await update.effective_message.reply_text("EMAIL_ID rəqəm olmalıdır. /email list yaz.")
+            return
+        app_key, status = args[2].lower(), args[3].lower()
+        if app_key not in ("gold", "arctic", "lumber"):
+            await update.effective_message.reply_text("Tətbiq gold, arctic və ya lumber olmalıdır.")
+            return
+        if status not in ("active", "pending", "unavailable", "closed"):
+            await update.effective_message.reply_text("Status active, pending, unavailable və ya closed olmalıdır.")
+            return
+        with connect() as db:
+            exists = db.execute("SELECT email FROM tracker_email_accounts WHERE id=?", (account_id,)).fetchone()
+            if not exists:
+                await update.effective_message.reply_text("Profil tapılmadı. /email list yaz.")
+                return
+            db.execute(
+                "INSERT INTO tracker_app_status(account_id,app_key,status,updated) VALUES(?,?,?,?) "
+                "ON CONFLICT(account_id,app_key) DO UPDATE SET status=excluded.status,updated=excluded.updated",
+                (account_id, app_key, status, now_local())
+            )
+        await update.effective_message.reply_text(
+            f"✅ Status qeyd edildi: profil #{account_id} ({exists['email']}) — "
+            f"{APPS[app_key][0]}: {status}"
+        )
+        return
+    if action == "list" and len(args) == 2:
+        try:
+            account_id = int(args[1])
+        except ValueError:
+            await update.effective_message.reply_text("EMAIL_ID rəqəm olmalıdır.")
+            return
+        with connect() as db:
+            email = db.execute("SELECT email FROM tracker_email_accounts WHERE id=?", (account_id,)).fetchone()
+            rows = db.execute(
+                "SELECT app_key,status,updated FROM tracker_app_status WHERE account_id=? ORDER BY app_key",
+                (account_id,)
+            ).fetchall()
+        if not email:
+            await update.effective_message.reply_text("Profil tapılmadı. /email list yaz.")
+            return
+        lines = [f"📱 TƏTBİQ STATUSLARI — {email['email']}"]
+        status_map = {r["app_key"]: r["status"] for r in rows}
+        for key in ("gold", "arctic", "lumber"):
+            lines.append(f"• {APPS[key][0]}: {status_map.get(key, 'qeyd edilməyib')}")
+        await update.effective_message.reply_text("\\n".join(lines))
+        return
+    await update.effective_message.reply_text(
+        "İstifadə: /appstatus set EMAIL_ID gold|arctic|lumber active|pending|unavailable|closed "
+        "və ya /appstatus list EMAIL_ID"
+    )
 
 async def record(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await allowed(update):
@@ -292,7 +368,7 @@ def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
     for command, handler in [
-        ("start", start), ("help", help_cmd), ("apps", apps), ("email", email_cmd),
+        ("start", start), ("help", help_cmd), ("apps", apps), ("email", email_cmd), ("appstatus", appstatus),
         ("record", record), ("balance", balance), ("today", today), ("wallet", wallet),
         ("withdraw", withdraw), ("history", history),
     ]:
