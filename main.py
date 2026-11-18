@@ -105,6 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "BTC və Lightning ünvanları ayrıca saxlanılır. Qazanc və çıxarışlar əl ilə qeyd olunur.\n\n"
         "/apps — tətbiqlər və hədəflər\n"
         "/email add email@gmail.com — e-poçt profili əlavə et\n"
+        "/email series 8 71 — 08–71 profil seriyasını əlavə et\n"
         "/email list — profilləri göstər\n"
         "/appstatus set 1 gold active — profilin tətbiq statusunu qeyd et\n"
         "/appstatus list 1 — profilin tətbiq statuslarını göstər\n"
@@ -150,6 +151,22 @@ async def email_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📧 E-POÇT PROFİLLƏRİ\n" + "\n".join(f"{r['id']}. {r['email']}" for r in rows) +
             "\n\nYalnız ünvan saxlanılır; parol və giriş kodu istənilmir."
         )
+        return
+    if args[0].lower() == "series" and len(args) == 3:
+        try:
+            first, last = int(args[1]), int(args[2])
+            if first < 0 or last < first or last - first > 199:
+                raise ValueError
+        except ValueError:
+            await update.effective_message.reply_text("İstifadə: /email series 8 71")
+            return
+        added = 0
+        with connect() as db:
+            for n in range(first, last + 1):
+                address = f"ilqarqaziyev{n:02d}@gmail.com"
+                cur = db.execute("INSERT OR IGNORE INTO tracker_email_accounts(email,created) VALUES(?,?)", (address, now_local()))
+                added += max(cur.rowcount, 0)
+        await update.effective_message.reply_text(f"{added} yeni profil siyahıya əlavə edildi. Bu, Gmail hesablarının mövcudluğunu və tətbiq qeydiyyatını təsdiqləmir; yalnız icazəli hesabları istifadə et.")
         return
     if args[0].lower() == "add" and len(args) == 2:
         email = args[1].strip().lower()
