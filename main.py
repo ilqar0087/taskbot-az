@@ -215,7 +215,7 @@ async def appstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_map = {r["app_key"]: r["status"] for r in rows}
         for key in ("gold", "arctic", "lumber"):
             lines.append(f"• {APPS[key][0]}: {status_map.get(key, 'qeyd edilməyib')}")
-        await update.effective_message.reply_text("\\n".join(lines))
+        await update.effective_message.reply_text("\n".join(lines))
         return
     await update.effective_message.reply_text(
         "İstifadə: /appstatus set EMAIL_ID gold|arctic|lumber active|pending|unavailable|closed "
