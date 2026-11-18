@@ -65,6 +65,11 @@ def init_db():
             address TEXT NOT NULL,
             updated TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS tracker_lightning_wallet (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            address TEXT NOT NULL,
+            updated TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS tracker_withdrawals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             satoshis INTEGER NOT NULL CHECK(satoshis > 0),
@@ -96,7 +101,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🤖 TASK WORKER AZ — QAZANC İZLƏYİCİ\n\n"
         "Tətbiqlər: Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşırıqları.\n"
         "Gündəlik hədəf: 25 + 25 + 24 = 74 reklam (hədəfdir, məcburi limit deyil).\n"
-        "Bir BTC ünvanı saxlanılır. Qazanc və çıxarışlar əl ilə təsdiqlənərək qeyd olunur.\n\n"
+        "BTC və Lightning ünvanları ayrıca saxlanılır. Qazanc və çıxarışlar əl ilə qeyd olunur.\n\n"
         "/apps — tətbiqlər və hədəflər\n"
         "/email add email@gmail.com — e-poçt profili əlavə et\n"
         "/email list — profilləri göstər\n"
@@ -107,7 +112,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/balance — ümumi balans\n"
         "/today — bugünkü qeydlər\n"
         "/wallet — BTC ünvanına bax\n"
-        "/wallet set BTC_UNVANI — ümumi ünvanı yaz\n"
+        "/wallet set BTC_UNVANI — Bitcoin ünvanını yaz\n"
+        "/lightning — Lightning ünvanına bax\n"
+        "/lightning set EMAIL@DOMAIN — Lightning ünvanını yaz\n"
         "/withdraw SATOSHI TXID — edilmiş çıxarışı qeyd et\n"
         "/history — tarixçə\n"
         "/help — kömək"
@@ -322,6 +329,36 @@ async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "\nBot yalnız ünvanı saxlayır; pul göndərmir və private key saxlamır."
     )
 
+
+async def lightning(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    args = context.args
+    if args and args[0].lower() == "set" and len(args) == 2:
+        address = args[1].strip()
+        if len(address) > 254 or not re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", address):
+            await update.effective_message.reply_text(
+                "Lightning ünvanının formatı düzgün görünmür. Məsələn: name@walletofsatoshi.com"
+            )
+            return
+        with connect() as db:
+            db.execute(
+                "INSERT INTO tracker_lightning_wallet(id,address,updated) VALUES(1,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET address=excluded.address,updated=excluded.updated",
+                (address, now_local())
+            )
+        await update.effective_message.reply_text(
+            "✅ Wallet of Satoshi Lightning ünvanı saxlanıldı. Bu, BTC on-chain ünvanından ayrıdır. "
+            "Bot avtomatik ödəniş göndərmir."
+        )
+        return
+    with connect() as db:
+        row = db.execute("SELECT address FROM tracker_lightning_wallet WHERE id=1").fetchone()
+    await update.effective_message.reply_text(
+        "Lightning ünvanı: " + (row["address"] if row else "hələ əlavə edilməyib") +
+        "\\nBu ünvan yalnız saxlanılır; bot ödəniş göndərmir."
+    )
+
 async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await allowed(update):
         return
@@ -370,7 +407,7 @@ def main():
     for command, handler in [
         ("start", start), ("help", help_cmd), ("apps", apps), ("email", email_cmd), ("appstatus", appstatus),
         ("record", record), ("balance", balance), ("today", today), ("wallet", wallet),
-        ("withdraw", withdraw), ("history", history),
+        ("lightning", lightning), ("withdraw", withdraw), ("history", history),
     ]:
         app.add_handler(CommandHandler(command, handler))
     log.info("Task Worker AZ earnings tracker started")
