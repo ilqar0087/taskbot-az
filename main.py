@@ -1,1035 +1,304 @@
-import asyncio
-import json
 import logging
 import os
 import re
 import sqlite3
-import urllib.parse
-import urllib.request
-from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or os.getenv("BOT_TOKEN", "").strip()
-OWNER = os.getenv("OWNER_TELEGRAM_ID", "")
-DB = os.getenv("DATABASE_PATH", "/data/taskbot.sqlite3")
+TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
+OWNER = (os.getenv("OWNER_TELEGRAM_ID") or "").strip()
+DB_PATH = os.getenv("DATABASE_PATH", "/data/taskbot.sqlite3")
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-# Avoid logging HTTP URLs that contain Telegram bot API tokens.
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("task-worker")
 
-SITES = [
-    ("Microworker.app", "https://microworker.app/", "Mikrotapşırıqlar; sayt USDT/USDC-ni BNB Smart Chain (BEP20) ilə ödədiyini, minimum çıxarışın $5 olduğunu bildirir. Platformanın öz statistikası kiçikdir; əvvəl real tapşırıq, hesab uyğunluğu və payout şərtlərini yoxla. Depozit etmə."),
-    ("Mindrift", "https://www.mindrift.ai/", "AI mətn qiymətləndirmə və təlim layihələri. Azərbaycan üzrə qəbul və ödəniş üsulunu əvvəlcədən təsdiqlə."),
-    ("Clickworker", "https://www.clickworker.com/clickworker/", "Mikrotapşırıqlar və AI data işi. Azərbaycan qeydiyyatı və ödəniş üsulu Payment details bölməsində təsdiqlənməlidir."),
-    ("CrowdGen by Appen", "https://crowdgen.com/", "AI data layihələri. Layihənin Azərbaycana açıq olmasını və ödəniş metodunu hər elanda yoxla."),
-    ("Jwuma / Corpshore", "https://platform.corpshore.ai/azerbaijan", "Azərbaycan üçün AI data, mətn, tərcümə və səs tapşırıqları. USD bank hesabına köçürmə göstərilir; telefonda işləmə və konkret layihə mövcudluğunu əvvəlcədən təsdiqlə."),
-    ("OneForma — Azeri Translation Quality Rater", "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/", "Azərbaycan üçün açıq dil layihəsi; kompüter və gündə 2 saat tələb olunur, telefonla işləmək uyğun deyil."),
-    ("Andovar", "https://careers.andovar.com/freelance-and-work-from-home-opportunities/", "Dil və səs yazısı layihələri. Konkret Azərbaycan layihəsinin açıq olub-olmadığını yoxla; əvvəlki səs yazısı elanı aktiv olmaya bilər."),
-    ("Work.az", "https://work.az/", "Azərbaycan üzrə yerli işlər. Müştəri ilə qiyməti, son tarixi və ödənişi yazılı razılaşdır."),
-    ("Upwork", "https://www.upwork.com/", "Beynəlxalq freelance layihələr. Komissiya və Azərbaycanda işləyən çıxarış üsulunu əvvəlcədən yoxla."),
-    ("Fiverr", "https://www.fiverr.com/", "Xidmət satışı. Sifarişlər insan təsdiqi ilə; Azərbaycanda işləyən çıxarış metodunu yoxla."),
-    ("GitHub Bounties", "https://github.com/issues?q=is%3Aissue+is%3Aopen+bounty", "Yalnız real pul məbləği, açıq issue və təsdiqlənən orijinal mənbə olan bounty elanları."),
-    ("FaucetPay", "https://faucetpay.io/", "Kripto mikro-cüzdanıdır; özü işəgötürən deyil. Faucet, PTC və offerwall tapşırıqları üçüncü tərəflərdən gəlir. Bot yalnız qaydaların açıq icazə verdiyi API-ləri avtomatlaşdıra bilər."),
-    ("Algora", "https://algora.io/", "Açıq mənbə bounty-ləri. Pul mükafatı, uyğunluq və payout şərtlərini hər işdə yoxla."),
-    ("Jobicy", "https://jobicy.com/", "Uzaqdan iş elanları. Bot açıq API-dən elanları çəkir; ölkə uyğunluğu və maaşı yoxla."),
-    ("Remote OK", "https://remoteok.com/", "Uzaqdan iş elanları. Bot açıq feed-dən elanları çəkir; müraciət əl ilə edilir."),
-]
+APPS = {
+    "gold": ("Gold Diggers", 25),
+    "arctic": ("Arctic Rush", 25),
+    "lumber": ("Lumberjack", 24),
+    "task": ("Task Worker AZ tapşırıqları", 0),
+}
+BTC_ADDRESS_RE = re.compile(r"^(bc1[ac-hj-np-z02-9]{11,71}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})$")
 
-AZERBAIJAN_LEADS = [
-    {
-        "name": "Microworker.app — USDT/USDC BEP20 mikrotapşırıqları",
-        "url": "https://microworker.app/",
-        "status": "Azərbaycan ölkələr siyahısındadır. Sayt USDT/USDC BEP20 ödənişi və $5 minimum çıxarış bildirir; platformanın öz payout statistikası hələ kiçikdir.",
-        "details": "Qeydiyyat pulsuzdur. Tapşırığı özün yerinə yetirib düzgün sübut göndərməlisən; bot tapşırıqları axtarıb süzür, amma CAPTCHA, sosial hesab fəaliyyəti və insan sübutu tələb edən işi sənin əvəzinə etmir. Qazanc təsdiqləndikdən 3 gün sonra çıxarıla bilər. Depozit etmə."
-    },
-    {
-        "name": "Jwuma / Corpshore — Azərbaycan AI tapşırıqları",
-        "url": "https://platform.corpshore.ai/azerbaijan",
-        "status": "Azərbaycan ayrıca dəstəklənən ölkə kimi göstərilir; bu, avtomatik iş zəmanəti deyil.",
-        "details": "Mətn annotasiyası, tərcümə yoxlaması, QA və səs/məlumat toplama. Ödəniş həftəlik batch kimi göstərilir; Azərbaycan üçün USD bank köçürməsi, 2% komissiya (minimum $10, maksimum $30). USD hesab tələb oluna bilər. Telefon uyğunluğu və real tapşırıq mövcudluğu qeydiyyatdan əvvəl təsdiqlənməlidir."
-    },
-    {
-        "name": "OneForma — Azeri Translation Quality Rater (açıq layihə)",
-        "url": "https://www.oneforma.com/projects/paragraph-level-translation-quality-rater/",
-        "status": "Rəsmi OneForma layihələr siyahısında Azerbaijan üçün açıq göstərilir; vəziyyət müraciət panelində yenidən təsdiqlənməlidir.",
-        "details": "Azeri (Latin) tərcümələrinin keyfiyyətini qiymətləndirmə; ödəniş təsdiqlənmiş material başınadır, təxminən gündə 2 saat. Məbləğ layihə səhifəsində göstərilmir. Telefon/kompüter tələbi müraciət panelində dəqiqləşdirilməlidir."
-    },
-    {
-        "name": "Andovar — dil və səs yazısı layihələri",
-        "url": "https://careers.andovar.com/freelance-and-work-from-home-opportunities/",
-        "status": "Ümumi freelancer qeydiyyat səhifəsi mövcuddur; əvvəlki Azərbaycan səs layihəsinin aktivliyi təsdiqlənməyib.",
-        "details": "Azərbaycan dili üzrə konkret layihə açıqdırsa müraciət et. Tapşırıq, qiymət, cihaz tələbi və ödəniş müddətini yazılı təsdiqlə."
-    },
-    {
-        "name": "Welo Data — Azerbaijani Talent Hub",
-        "url": "https://jobs.lever.co/weloglobal/e0af350d-f782-4fd7-9f4a-7a011df6bcab",
-        "status": "İştirakçı bazasına qəbul; aktiv vakansiya və zəmanətli iş deyil.",
-        "details": "Azərbaycan dili və ingilis dili tələb oluna bilər. Welo-nun rəsmi FAQ-sına görə mobil telefonla işləmək mümkün deyil; kompüter tələb olunur. Buna görə telefon siyahısında ehtiyat variantdır."
-    },
-    {
-        "name": "Work.az — Azərbaycan üzrə yerli və frilans işlər",
-        "url": "https://work.az/",
-        "status": "Elan kataloqu; hər elanın etibarlılığı və statusu ayrıca yoxlanmalıdır.",
-        "details": "Müştəri ilə iş həcmini, qiyməti, son tarixi və ödənişi yazılı razılaşdır. İşə başlamaq üçün əvvəlcədən pul göndərmə."
-    }
-]
-
-GITHUB_QUERIES = [
-    "is:issue is:open label:bounty",
-    "is:issue is:open bounty",
-    'is:issue is:open "reward" "USDC"',
-]
-HUMAN_ONLY = ("no ai", "no automation", "human only", "human-only", "must be done manually", "no bots")
-AGENT_PERMISSION = ("ai agents are welcome", "ai agents may", "agents are explicitly allowed", "autonomous agents are allowed", "agent submissions are allowed", "bot submissions are allowed", "automation is explicitly allowed")
-JUNK_PHRASES = ("banana pudding", "bananarmonics", "stereogustatory", "recursive ontological singularity", "five-fold esoteric", "opire singularity council")
-GLOBAL_LOCATION_TERMS = ("worldwide", "anywhere", "global", "azerbaijan", "work from anywhere", "remote worldwide")
-MOBILE_TASK_TERMS = (
-    "data annotation", "data labeling", "transcription", "voice recording", "audio recording",
-    "photo task", "photo collection", "video task", "video recording", "content moderation",
-    "social media", "survey", "user testing", "app testing", "translation", "microtask",
-    "ai training", "image labeling", "speech data", "language data", "ugc"
-)
-BEGINNER_TERMS = (
-    "entry level", "entry-level", "junior", "no experience", "without experience",
-    "beginner", "training provided", "no degree", "freelance", "contributor",
-    "microtask", "task-based", "part-time"
-)
-SENIOR_TERMS = ("senior", "lead ", "manager", "director", "vp ", "vice president", "head of ", "principal", "staff engineer", "5+ years", "7+ years", "10+ years")
-
-NO_CASH_PHRASES = (
-    "no cash allocated", "does not currently have cash", "no cash reward",
-    "not a cash bounty", "cash is not guaranteed", "cash not guaranteed",
-    "deferred ledger", "recognition-only", "recognition only", "token-only",
-    "paid in tokens", "token reward only", "no monetary reward", "no payment",
-    "unpaid", "volunteer", "for recognition only"
-)
-MIRROR_WARNING_PHRASES = (
-    "automated ci conformance mirror", "automated ci regression mirror",
-    "manual pull requests from human engineers are not reviewed",
-    "external edge conformance mirror", "specification shards"
-)
-MONEY_RE = re.compile(r"\$\s?([0-9][0-9,]*(?:\.\d{1,2})?)\s?([kKmM]?)|([0-9][0-9,]*(?:\.\d{1,2})?)\s?(USDC|USD)\b", re.I)
-SOURCE_URL_RE = re.compile(r"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/\d+", re.I)
-
-def extract_source_url(body, fallback):
-    match = SOURCE_URL_RE.search(body or "")
-    return match.group(0).rstrip(").,") if match else fallback
-
-def parse_reward(title, body):
-    clean_body = re.split(r"积分币奖励|coin reward", body or "", flags=re.I)[0]
-    candidates = []
-    for line in (title + "\n" + clean_body).splitlines():
-        if re.search(r"real reward|cash reward|bounty|reward|赏金", line, re.I):
-            for match in MONEY_RE.finditer(line):
-                if match.group(1):
-                    amount = float(match.group(1).replace(",", ""))
-                    suffix = (match.group(2) or "").lower()
-                    amount *= 1000 if suffix == "k" else 1000000 if suffix == "m" else 1
-                    candidates.append(amount)
-                elif match.group(3) and (match.group(4) or "").upper() in ("USD", "USDC"):
-                    candidates.append(float(match.group(3).replace(",", "")))
-    if not candidates:
-        return "Mükafat təsdiqlənməyib"
-    amount = max(candidates)
-    return "$" + format(amount, ",.0f") if amount % 1 == 0 else "$" + format(amount, ",.2f")
-
-def classify_eligibility(text):
-    lowered = (text or "").lower()
-    if any(word in lowered for word in HUMAN_ONLY):
-        return "HUMAN_ONLY — avtomatlaşdırma etmə"
-    if any(phrase in lowered for phrase in AGENT_PERMISSION):
-        return "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla"
-    return "REVIEW_REQUIRED — AI agent icazəsi açıq təsdiqlənməyib"
-
-def has_explicit_escrow(text):
-    lowered = (text or "").lower()
-    return any(term in lowered for term in (
-        "escrow funded", "escrow is active", "funds are escrowed",
-        "payment held in escrow", "escrow deposit confirmed",
-        "funded escrow", "escrow balance confirmed"
-    ))
-
-
-def qualifies_remote_job(title, location, description):
-    """Keep only clearly worldwide/Azerbaijan-eligible, beginner and phone-friendly work."""
-    loc = (location or "").lower()
-    text = ((title or "") + " " + (description or "")).lower()
-    if not any(term in loc for term in GLOBAL_LOCATION_TERMS):
-        return False, "Ölkə uyğunluğu təsdiqlənməyib"
-    if any(term in text for term in SENIOR_TERMS):
-        return False, "Senior/təcrübəli vəzifədir"
-    if not any(term in text for term in MOBILE_TASK_TERMS):
-        return False, "Telefonla görülən tapşırıq olduğu təsdiqlənməyib"
-    if not any(term in text for term in BEGINNER_TERMS):
-        return False, "Başlanğıc səviyyə/təcrübəsiz qəbul təsdiqlənməyib"
-    return True, "AZ uyğunluğu açıq göstərilib; başlanğıc və mobil tapşırıq — müraciət şərtlərini yoxla"
-
-
-def has_mirror_warning(text):
-    lowered = (text or "").lower()
-    return any(phrase in lowered for phrase in MIRROR_WARNING_PHRASES)
-
-
-def has_competing_pull_request(owner, repo, issue_number):
-    """Skip issues that already have an open or merged solution PR."""
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.2"}
-    comments_url = "https://api.github.com/repos/%s/%s/issues/%s/comments?per_page=100" % (owner, repo, issue_number)
-    try:
-        req = urllib.request.Request(comments_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            comments = json.loads(response.read().decode("utf-8"))
-        pattern = re.compile(r"https?://github\.com/%s/%s/pull/(\d+)" % (re.escape(owner), re.escape(repo)), re.I)
-        pr_numbers = set()
-        for comment in comments:
-            pr_numbers.update(pattern.findall(comment.get("body") or ""))
-        for number in pr_numbers:
-            pr_url = "https://api.github.com/repos/%s/%s/pulls/%s" % (owner, repo, number)
-            req = urllib.request.Request(pr_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:
-                pr = json.loads(response.read().decode("utf-8"))
-            if pr.get("state") == "open" or pr.get("merged") is True:
-                return True
-        return False
-    except Exception as exc:
-        log.info("Optional PR check skipped for %s/%s#%s: %s", owner, repo, issue_number, type(exc).__name__)
-        return False
-
-
-def verify_github_issue(url):
-    match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/issues/(\d+)", url or "")
-    if not match:
-        return False, "Orijinal GitHub issue linki tapılmadı"
-    owner, repo, number = match.groups()
-    api_url = "https://api.github.com/repos/%s/%s/issues/%s" % (owner, repo, number)
-    req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            issue = json.loads(response.read().decode("utf-8"))
-        if issue.get("state") != "open" or issue.get("pull_request"):
-            return False, "Orijinal elan açıq deyil və ya issue deyil"
-        if issue.get("assignees"):
-            return False, "Orijinal elan artıq icraçıya təyin edilib"
-        content = (issue.get("title") or "") + "\n" + (issue.get("body") or "")
-        if has_mirror_warning(content):
-            return False, "Avtomatik CI güzgüsüdür; normal PR-lar qəbul edilmir"
-        if any(term in content.lower() for term in NO_CASH_PHRASES):
-            return False, "Nağd ödəniş təsdiqlənməyib"
-        if classify_eligibility(content) != "AGENT_ALLOWED — yenə də platforma qaydalarını yoxla":
-            return False, "AI agentə açıq icazə yoxdur"
-        if not has_explicit_escrow(content):
-            return False, "Escrow maliyyələşməsi açıq təsdiqlənməyib"
-        if has_competing_pull_request(owner, repo, number):
-            return False, "Artıq açıq və ya birləşdirilmiş həll PR-ı mövcuddur"
-        return True, content
-    except Exception as exc:
-        return False, "Orijinal elan yoxlanmadı (%s)" % type(exc).__name__
-
-
-def mode_keyboard(mode="demo"):
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton(("✅ " if mode == "demo" else "") + "🧪 DEMO", callback_data="task_mode_demo"),
-        InlineKeyboardButton(("✅ " if mode == "real" else "") + "🚀 REAL", callback_data="task_mode_real"),
-    ]])
-
-
+def now_local():
+    return datetime.now(timezone(timedelta(hours=4))).isoformat(timespec="seconds")
 
 def connect():
-    Path(DB).parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB)
+    path = Path(DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(str(path))
     db.row_factory = sqlite3.Row
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS opportunities(
-      id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, title TEXT, url TEXT UNIQUE,
-      reward TEXT, eligibility TEXT, summary TEXT, updated TEXT, active INTEGER NOT NULL DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS done(id INTEGER PRIMARY KEY, task_id INTEGER, note TEXT, created TEXT);
-    CREATE TABLE IF NOT EXISTS income(id INTEGER PRIMARY KEY, task_id INTEGER, cents INTEGER, note TEXT, created TEXT);
-    CREATE TABLE IF NOT EXISTS visitors(user_id TEXT PRIMARY KEY, username TEXT, full_name TEXT, first_seen TEXT);
-    CREATE TABLE IF NOT EXISTS user_settings(user_id TEXT PRIMARY KEY, task_mode TEXT NOT NULL DEFAULT 'real');
-    """)
-    columns = {row[1] for row in db.execute("PRAGMA table_info(opportunities)")}
-    if "active" not in columns:
-        db.execute("ALTER TABLE opportunities ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
     return db
 
-
-def get_mode(user_id):
+def init_db():
     with connect() as db:
-        row = db.execute("SELECT task_mode FROM user_settings WHERE user_id=?", (str(user_id),)).fetchone()
-    return row[0] if row else "real"
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS tracker_email_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            created TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tracker_earnings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            app_key TEXT NOT NULL,
+            account_id INTEGER,
+            satoshis INTEGER NOT NULL CHECK(satoshis >= 0),
+            ads_count INTEGER NOT NULL DEFAULT 0 CHECK(ads_count >= 0),
+            note TEXT NOT NULL DEFAULT '',
+            created TEXT NOT NULL,
+            FOREIGN KEY(account_id) REFERENCES tracker_email_accounts(id)
+        );
+        CREATE TABLE IF NOT EXISTS tracker_wallet (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            address TEXT NOT NULL,
+            updated TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS tracker_withdrawals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            satoshis INTEGER NOT NULL CHECK(satoshis > 0),
+            txid TEXT NOT NULL,
+            created TEXT NOT NULL
+        );
+        """)
 
-
-def set_mode(user_id, mode):
-    with connect() as db:
-        db.execute("INSERT INTO user_settings(user_id,task_mode) VALUES(?,?) "
-                   "ON CONFLICT(user_id) DO UPDATE SET task_mode=excluded.task_mode",
-                   (str(user_id), mode))
-
-
-def fetch_github_bounties():
-    found = []
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "TaskWorkerAZ/2.0"}
-    for query in GITHUB_QUERIES:
-        params = urllib.parse.urlencode({"q": query, "sort": "updated", "order": "desc", "per_page": 20})
-        req = urllib.request.Request("https://api.github.com/search/issues?" + params, headers=headers)
-        try:
-            with urllib.request.urlopen(req, timeout=15) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-            for item in payload.get("items", []):
-                title = (item.get("title") or "").strip()
-                body = item.get("body") or ""
-                if not title or not item.get("html_url"):
-                    continue
-                combined = title + "\n" + body
-                lowered = combined.lower()
-                if any(phrase in lowered for phrase in JUNK_PHRASES) or has_mirror_warning(combined):
-                    continue
-                source_url = extract_source_url(body, item["html_url"])
-                # Only show canonical, verified, open, unassigned cash bounty issues.
-                verified, source_content = verify_github_issue(source_url)
-                if not verified or not isinstance(source_content, str):
-                    continue
-                if item.get("assignees"):
-                    continue
-                if any(term in source_content.lower() for term in NO_CASH_PHRASES):
-                    continue
-                if verified and isinstance(source_content, str):
-                    source_title, _, source_body = source_content.partition("\n")
-                    if source_title:
-                        title = source_title.strip()
-                    reward_text = parse_reward(title, source_body)
-                    if reward_text == "Mükafat təsdiqlənməyib":
-                        continue
-                    eligibility = classify_eligibility(title + "\n" + source_body)
-                    summary_source = source_body
-                else:
-                    continue
-                verification = "ORIGINAL_VERIFIED_CASH_REWARD"
-                summary = "[%s] %s" % (verification, re.sub(r"\s+", " ", summary_source).strip()[:450])
-                found.append({
-                    "source": "GitHub", "title": title[:240], "url": source_url,
-                    "reward": reward_text, "eligibility": eligibility,
-                    "summary": summary,
-                    "updated": item.get("updated_at") or datetime.now(timezone.utc).isoformat(),
-                })
-        except Exception as exc:
-            log.warning("GitHub task scan failed: %s", exc)
-    unique = {item["url"]: item for item in found}
-    return list(unique.values())[:40]
-
-
-def fetch_remote_job_feeds():
-    """Fetch public remote-job feeds; retain the original source URL and attribution."""
-    found = []
-    headers = {"User-Agent": "TaskWorkerAZ/2.1 (+https://github.com/ilqar0087/taskbot-az)", "Accept": "application/json"}
-
-    try:
-        req = urllib.request.Request("https://jobicy.com/api/v2/remote-jobs?count=50", headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        for job in payload.get("jobs", []):
-            title = (job.get("jobTitle") or "").strip()
-            url = job.get("url") or ""
-            if not title or not url.startswith("http"):
-                continue
-            location = job.get("jobGeo") or "Remote — dəqiqləşdir"
-            salary_min, salary_max = job.get("salaryMin"), job.get("salaryMax")
-            currency = job.get("salaryCurrency") or "USD"
-            salary = f"Maaş: {salary_min or '?'}–{salary_max or '?'} {currency}" if salary_min or salary_max else "Maaş: elanda göstərilməyib"
-            excerpt = job.get("jobExcerpt") or job.get("jobDescription") or ""
-            qualifies, reason = qualifies_remote_job(title, location, excerpt)
-            if not qualifies:
-                continue
-            found.append({
-                "source": "Jobicy",
-                "title": f"{title} — {job.get('companyName') or 'Şirkət göstərilməyib'} [{location}]",
-                "url": url,
-                "reward": salary,
-                "eligibility": "AZ + MOBİL + BAŞLANĞIC — " + reason,
-                "summary": "[Mənbə: Jobicy] " + re.sub(r"\s+", " ", excerpt).strip()[:450],
-                "updated": job.get("pubDate") or datetime.now(timezone.utc).isoformat(),
-            })
-    except Exception as exc:
-        log.warning("Jobicy feed failed: %s", type(exc).__name__)
-
-    # Remote OK's first JSON object contains its API usage/attribution notice.
-    try:
-        req = urllib.request.Request("https://remoteok.com/api", headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        for job in payload:
-            if not isinstance(job, dict) or not job.get("position") or not job.get("url"):
-                continue
-            url = job["url"]
-            if not url.startswith("http"):
-                continue
-            location = job.get("location") or "Remote — dəqiqləşdir"
-            low, high = job.get("salary_min"), job.get("salary_max")
-            salary = f"Maaş: ${low}–${high}" if low or high else "Maaş: elanda göstərilməyib"
-            tags = ", ".join(job.get("tags") or [])
-            summary = (job.get("description") or "") + (f" | Etiketlər: {tags}" if tags else "")
-            qualifies, reason = qualifies_remote_job(job["position"], location, summary + " " + tags)
-            if not qualifies:
-                continue
-            found.append({
-                "source": "Remote OK",
-                "title": f"{job['position']} — {job.get('company') or 'Şirkət göstərilməyib'} [{location}]",
-                "url": url,
-                "reward": salary,
-                "eligibility": "AZ + MOBİL + BAŞLANĞIC — " + reason,
-                "summary": "[Mənbə: Remote OK] " + re.sub(r"<[^>]+>", " ", re.sub(r"\s+", " ", summary)).strip()[:450],
-                "updated": job.get("date") or datetime.now(timezone.utc).isoformat(),
-            })
-    except Exception as exc:
-        log.warning("Remote OK feed failed: %s", type(exc).__name__)
-
-    unique = {item["url"]: item for item in found}
-    return list(unique.values())[:80]
-
-
-def fetch_mobile_platform_leads():
-    """Focus discovery on the three selected platforms; never imply a task is currently available."""
-    found = []
-    priority_names = ("Microworker.app", "Jwuma / Corpshore", "Andovar")
-    leads = [lead for lead in AZERBAIJAN_LEADS
-             if lead["name"].startswith(priority_names)]
-    for lead in leads:
-        name = lead["name"]
-        if name.startswith("Microworker.app"):
-            device = "MOBİL TAPŞIRIQLAR MÜMKÜNDÜR — hər tapşırığın cihaz şərtini yoxla"
-            extra = " Bot platformanın işçi hesabındakı tapşırıqları API ilə oxumur; hesab panelində yoxlanmalıdır."
-        elif name.startswith("Jwuma / Corpshore"):
-            device = "MOBİL UYĞUNLUQ TƏSDİQLƏNMƏLİDİR"
-            extra = " Azərbaycan üçün qeydiyyat var; konkret layihə və telefon tələbi hesabda təsdiqlənməlidir."
-        else:
-            device = "MOBİL SƏS/TƏRCÜMƏ LAYİHƏSİ OLA BİLƏR — aktiv AZ layihəsi təsdiqlənməlidir"
-            extra = " Ümumi freelancer qeydiyyatı aktiv layihə demək deyil."
-        found.append({
-            "source": "Prioritet mobil platforma",
-            "title": name,
-            "url": lead["url"],
-            "reward": "Yalnız təsdiqlənmiş işə görə; məbləğ və payout hesabda yoxlanmalıdır",
-            "eligibility": device + " | Azərbaycan və payout ayrıca təsdiqlənməlidir",
-            "summary": lead["status"] + " " + lead["details"] + extra,
-            "updated": datetime.now(timezone.utc).isoformat(),
-        })
-    return found
-
-EARN_PLATFORM_LEADS = [
-    {
-        "name": "JumpTask — video, reklam və mikro-tapşırıqlar",
-        "url": "https://jumptask.io/",
-        "status": "Rəsmi platforma mikro-tapşırıq, video/reklam və digər offerwall işləri təqdim edir. Azərbaycan üçün real tapşırıq və payout seçimi hesabın Payout bölməsində yoxlanmalıdır.",
-        "details": "1,000 kredit = $1. İlk çıxarış həddi $1, sonrakılar $0.50. Kripto daxil olmaqla ödəniş üsulları ölkəyə görə dəyişir. Bot yalnız açıq elanları göstərir; hesab girişi, reklam izləmə və offerwall tapşırığı istifadəçi tərəfindən edilməlidir."
-    },
-    {
-        "name": "PrizeRebel — sorğular və offerwall tapşırıqları",
-        "url": "https://www.prizerebel.com/",
-        "status": "Rəsmi dəstək səhifəsi platformanın bir çox ölkədə, o cümlədən ABŞ/UK/CA/AU xaricində də işlədiyini bildirir; sorğu sayı regiona görə dəyişir.",
-        "details": "Sorğular, offerwall və mükafat tapşırıqları. Azərbaycan hesabında mövcud təklifləri, minimum çıxarışı və faktiki payout üsulunu qeydiyyatdan sonra yoxla. Avtomatik sorğu doldurma və saxta fəaliyyət edilmir."
-    },
-    {
-        "name": "PaidVerts — reklam izləmə",
-        "url": "https://paidverts.org/",
-        "status": "Sayt pulsuz reklam baxışları ilə BAP xalı verdiyini bildirir; bunlar birbaşa nağd pul deyil. Rəsmi şərtlərdə gündə 10-a qədər pulsuz reklam, hər biri 15 saniyə göstərilir.",
-        "details": "Rəsmi şərtlər reklam baxış taymerini atlamağı və reklam baxışını avtomatlaşdırmağı qadağan edir. BAP pul deyil; gündəlik gəlir mexanizmi ayrıca şərtlərə bağlıdır. Minimum çıxarış $5 kimi göstərilir. Depozit etmə; yalnız əl ilə və qaydalara uyğun istifadə et."
-    }
-]
-
-def fetch_earn_platform_leads():
-    found = []
-    for lead in EARN_PLATFORM_LEADS:
-        found.append({
-            "source": "Reklam və mikro-tapşırıq platforması",
-            "title": lead["name"],
-            "url": lead["url"],
-            "reward": "Tapşırıq və ölkə üzrə dəyişir; hesabda təsdiqlənməlidir",
-            "eligibility": "REAL PLATFORM | AZ və payout ayrıca yoxlanmalıdır | MANUAL_ONLY",
-            "summary": lead["status"] + " " + lead["details"],
-            "updated": datetime.now(timezone.utc).isoformat(),
-        })
-    return found
-
-
-def fetch_all_opportunities():
-    # Prioritize explicit Azerbaijan task projects/platforms, then live remote vacancies and cash bounties.
-    return fetch_earn_platform_leads() + fetch_mobile_platform_leads() + fetch_remote_job_feeds() + fetch_github_bounties()
-
-
-def save_opportunities(items):
-    new_items = []
-    with connect() as db:
-        if items:
-            db.execute("UPDATE opportunities SET active=0")
-        known = {row[0] for row in db.execute("SELECT url FROM opportunities")}
-        for item in items:
-            if item["url"] not in known:
-                new_items.append(item)
-                known.add(item["url"])
-            db.execute("""INSERT INTO opportunities(source,title,url,reward,eligibility,summary,updated,active)
-              VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(url) DO UPDATE SET
-              title=excluded.title,reward=excluded.reward,eligibility=excluded.eligibility,
-              summary=excluded.summary,updated=excluded.updated,active=1""",
-              (item["source"], item["title"], item["url"], item["reward"],
-               item["eligibility"], item["summary"], item["updated"]))
-    return new_items
-
-
-async def private_only(update):
-    if not update.effective_chat or update.effective_chat.type != "private":
-        await update.effective_message.reply_text("Təhlükəsizlik üçün bot yalnız şəxsi çatda işləyir.")
+async def allowed(update: Update):
+    user = update.effective_user
+    chat = update.effective_chat
+    if not OWNER or not user or str(user.id) != OWNER:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "Bot hələ sahib Telegram ID-si ilə məhdudlaşdırılmayıb və ya bu hesab sahib deyil. "
+                "Railway-də OWNER_TELEGRAM_ID dəyişənini yoxla."
+            )
+        return False
+    if not chat or chat.type != "private":
+        if update.effective_message:
+            await update.effective_message.reply_text("Təhlükəsizlik üçün botdan şəxsi çatda istifadə et.")
         return False
     return True
 
-
-async def scheduled_scan(app):
-    while True:
-        try:
-            items = await asyncio.to_thread(fetch_all_opportunities)
-            new_items = await asyncio.to_thread(save_opportunities, items)
-            if OWNER and new_items:
-                lines = ["🆕 Yeni iş və tapşırıq imkanları:"]
-                for item in new_items[:8]:
-                    lines.append(f"\n• {item['title']}\n{item['reward']} | {item['eligibility']}\n{item['url']}")
-                await app.bot.send_message(chat_id=int(OWNER), text="\n".join(lines), disable_web_page_preview=True)
-        except Exception:
-            log.exception("Scheduled task discovery failed")
-        await asyncio.sleep(10 * 60)
-
-
-async def post_init(app):
-    app.bot_data["scanner_task"] = asyncio.create_task(scheduled_scan(app))
-
-
-async def post_shutdown(app):
-    task = app.bot_data.get("scanner_task")
-    if task and not task.done():
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await private_only(update):
+    if not await allowed(update):
         return
-    user = update.effective_user
-    with connect() as db:
-        cur = db.execute("INSERT OR IGNORE INTO visitors(user_id,username,full_name,first_seen) VALUES(?,?,?,?)",
-            (str(user.id), user.username or "", user.full_name, datetime.now(timezone.utc).isoformat()))
-        is_new = cur.rowcount > 0
-    if is_new and OWNER and str(user.id) != OWNER:
-        try:
-            await context.bot.send_message(chat_id=int(OWNER),
-                text=f"Yeni istifadəçi: {user.full_name} | @{user.username or 'yoxdur'} | ID: {user.id}")
-        except Exception:
-            log.exception("Owner notification failed")
-    mode = get_mode(user.id)
-    await update.message.reply_text(
-        "🤖 Task Worker AZ\n"
-        f"Rejim: {'DEMO' if mode == 'demo' else 'REAL elan axtarışı'}\n\n"
-        "/scan — prioritet 3 mobil platformanı və əlavə elanları axtar\n"
-        "/mobile — yalnız 3 prioritet mobil platforma\n"
-        "/earn — reklam/video/mikro-tapşırıq platformaları\n"
-        "/tasks — tapşırıq mənbələri\n"
-        "/opportunities — tapılmış elanlar\n"
-        "/view ID — elan təfərrüatı\n"
-        "/done ID qeyd — işi tamamlandı kimi qeyd et\n"
-        "/paid ID məbləğ qeyd — faktiki alınan pulu yaz\n"
-        "/balance — real gəlir\n/history — tarixçə\n/faucet — FaucetPay məlumatı\n/id — Telegram ID\n\n"
-        "DEMO: sınaq və elan baxışı. REAL: Azərbaycan/Worldwide uyğun, mobil və başlanğıc səviyyəli işlər. Bounty yalnız açıq AI icazəsi və escrow təsdiqi ilə göstərilir. Müraciət və iş icrası üçün insan təsdiqi tələb olunur.",
-        reply_markup=mode_keyboard(mode)
+    await update.effective_message.reply_text(
+        "🤖 TASK WORKER AZ — QAZANC İZLƏYİCİ\n\n"
+        "Tətbiqlər: Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşırıqları.\n"
+        "Gündəlik hədəf: 25 + 25 + 24 = 74 reklam (hədəfdir, məcburi limit deyil).\n"
+        "Bir BTC ünvanı saxlanılır. Qazanc və çıxarışlar əl ilə təsdiqlənərək qeyd olunur.\n\n"
+        "/apps — tətbiqlər və hədəflər\n"
+        "/email add email@gmail.com — e-poçt profili əlavə et\n"
+        "/email list — profilləri göstər\n"
+        "/record gold 1 120 20 qeyd — 120 satoshi və 20 reklamı qeyd et\n"
+        "/record task - 500 0 tapşırıq qazancı\n"
+        "/balance — ümumi balans\n"
+        "/today — bugünkü qeydlər\n"
+        "/wallet — BTC ünvanına bax\n"
+        "/wallet set BTC_UNVANI — ümumi ünvanı yaz\n"
+        "/withdraw SATOSHI TXID — edilmiş çıxarışı qeyd et\n"
+        "/history — tarixçə\n"
+        "/help — kömək"
     )
 
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await start(update, context)
 
-async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "task_mode_demo":
-        mode = "demo"
-        label = "🧪 DEMO rejimi seçildi."
-    elif query.data == "task_mode_real":
-        mode = "real"
-        label = ("🚀 REAL rejimi aktivdir. Bot real elanları axtaracaq və yeniləri barədə xəbər verəcək. "
-                 "Heç bir saxta qazanc yazılmır; müraciət və işə başlamaq üçün təsdiq tələb olunur.")
-    else:
+async def apps(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
         return
-    set_mode(query.from_user.id, mode)
-    await query.message.reply_text(label, reply_markup=mode_keyboard(mode))
+    lines = ["📋 TƏTBİQLƏR VƏ GÜNDƏLİK HƏDƏFLƏR"]
+    for key, (name, target) in APPS.items():
+        target_text = f"{target} reklam" if target else "tapşırıq qeydi"
+        lines.append(f"• {name} — {target_text} (dəyişən hədəf)")
+    lines.append("\nHədəflər plan üçündür. Faktiki reklam sayı və mükafat tətbiqin özündə təsdiqlənməlidir.")
+    await update.effective_message.reply_text("\n".join(lines))
 
-
-async def real_mode(update, context):
-    if not await private_only(update):
+async def email_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
         return
-    set_mode(update.effective_user.id, "real")
-    await update.message.reply_text(
-        "🚀 REAL rejim aktivdir və yadda saxlanıldı. Bot açıq ödənişli elanları axtaracaq; "
-        "yeni nəticələr barədə xəbər verəcək. /scan — indi axtar.",
-        reply_markup=mode_keyboard("real"))
-
-
-async def demo_mode(update, context):
-    if not await private_only(update):
-        return
-    set_mode(update.effective_user.id, "demo")
-    await update.message.reply_text("🧪 DEMO rejimi aktivdir.", reply_markup=mode_keyboard("demo"))
-
-
-async def status(update, context):
-    if not await private_only(update):
-        return
-    mode = get_mode(update.effective_user.id)
-    await update.message.reply_text("Vəziyyət: " + ("🚀 REAL" if mode == "real" else "🧪 DEMO") +
-        "\nMənbələr: GitHub nağd bounty, Jobicy, Remote OK.\n/scan — axtarış\n/azjobs — Azərbaycan platformaları")
-
-
-async def myid(update, context):
-    await update.message.reply_text(f"Telegram ID: {update.effective_user.id}")
-
-
-async def tasks(update, context):
-    if not await private_only(update):
-        return
-    lines = ["İş və bounty mənbələri (elanlar platformanın özündədir):"]
-    lines += [f"\n{i}. {name}\n{note}\n{url}" for i, (name, url, note) in enumerate(SITES, 1)]
-    lines.append("\nAzərbaycanda qeydiyyat və pul çıxarışı hər hesabda fərqli ola bilər. Microworker.app USDT/USDC BEP20 payout göstərir; əvvəl hesabda təsdiqlə. İş almaq üçün heç bir sayta depozit ödəmə.")
-    lines.append("Bot GitHub-da təsdiqlənən nağd bounty-ləri, Jobicy və Remote OK uzaqdan iş elanlarını axtarır. Elanlar mənbəyə keçidlə göstərilir; müraciət və işi görmək insan təsdiqi tələb edir.")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
-
- 
-async def azjobs(update, context):
-    if not await private_only(update):
-        return
-    lines = ["🇦🇿 Azərbaycan üçün iş platformaları — telefon uyğunluğu və ödəniş statusu ayrıca göstərilir:"]
-    for i, lead in enumerate(AZERBAIJAN_LEADS, 1):
-        lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nTələblər: {lead['details']}\n{lead['url']}")
-    lines.append("\nMicroworker.app-də əvvəl aktiv tapşırıqları və Azərbaycan hesabına payout uyğunluğunu yoxla. Sayt USDT/USDC BEP20 minimum $5 çıxarışını bildirir, lakin statistikası kiçikdir. Tapşırıq və qazanc zəmanətli deyil. Heç bir sayta iş almaq üçün depozit ödəmə.")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
-
-async def mobile(update, context):
-    if not await private_only(update):
-        return
-    selected = ("Microworker.app", "Jwuma / Corpshore", "Andovar")
-    lines = ["📱 PRIORITET MOBİL PLATFORMALAR", "Bot yalnız bu 3 mənbəni əsas prioritet kimi izləyir:"]
-    for lead in AZERBAIJAN_LEADS:
-        if not lead["name"].startswith(selected):
-            continue
-        lines.append(f"\n{lead['name']}\nStatus: {lead['status']}\n{lead['details']}\n{lead['url']}")
-    lines.append("\nQeyd: bu siyahı aktiv tapşırıq zəmanəti deyil. Hesabda açıq iş, cihaz tələbi və payout təsdiqlənməlidir. Bot sənin hesabına daxil olmur və insan təsdiqi tələb edən işi avtomatik göndərmir.")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
-
-
-async def earn(update, context):
-    if not await private_only(update):
-        return
-    lines = ["💸 REKLAM VƏ MİKRO-TAPŞIRIQ PLATFORMALARI", "Bot bu mənbələri izləyir; aktiv tapşırıq və ödəniş zəmanətli deyil:"]
-    for i, lead in enumerate(EARN_PLATFORM_LEADS, 1):
-        lines.append(f"\n{i}. {lead['name']}\nStatus: {lead['status']}\nQaydalar: {lead['details']}\n{lead['url']}")
-    lines.append("\nVacib: bot reklamları avtomatik izləmir və CAPTCHA/sorğu/offerwall tapşırığını sənin yerinə etmir. Yalnız platformanın açıq API-si və yazılı icazəsi olan işlər ayrıca avtomatlaşdırıla bilər. Depozit tələb edən işlərə pul yatırma.")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
-
-
-async def faucet(update, context):
-    if not await private_only(update):
-        return
-    await update.message.reply_text(
-        "FaucetPay: https://faucetpay.io/\n\n"
-        "FaucetPay özü işəgötürən deyil, kripto mikro-cüzdandır. Qazanc faucet, PTC reklamları və offerwall tərəfdaşlarının tapşırıqlarından gəlir.\n"
-        "Hesabında Faucet List, PTC Ads və Offerwall bölmələrini yoxla.\n\n"
-        "Bot CAPTCHA, reklam baxışı və ya saytın qadağan etdiyi claim-ləri avtomatik etməyəcək. Yalnız rəsmi API və konkret tapşırıq qaydaları avtomatlaşdırmaya açıq icazə verəndə icra modulu qoşulacaq.\n"
-        "FaucetPay bank hesabına birbaşa çıxarış etmir; kripto cüzdana çıxarış, minimum və şəbəkə haqqı tətbiq olunur.",
-        disable_web_page_preview=True
-    )
-
-
-async def scan(update, context):
-    if not await private_only(update):
-        return
-    await update.message.reply_text("Prioritet platformalar yoxlanır: Microworker.app, Jwuma/Corpshore və Andovar. Sonra əlavə uzaqdan işlər və təsdiqli bounty-lər axtarılır...")
-    try:
-        items = await asyncio.to_thread(fetch_all_opportunities)
-        await asyncio.to_thread(save_opportunities, items)
-        await update.message.reply_text(
-            f"Yoxlama bitdi: {len(items)} imkan tapıldı. "
-            f"Buraya {sum(1 for x in items if x['source'] == 'Platforma')} Azərbaycan platforması və "
-            f"{sum(1 for x in items if x['source'] != 'Platforma')} uyğun elan daxildir. "
-            "Platforma siyahısı aktiv iş zəmanəti deyil; real tapşırıq və payout hesabda yoxlanmalıdır. "
-            "Bounty yalnız açıq AI icazəsi və escrow təsdiqi ilə göstərilir. /opportunities yaz.")
-    except Exception as exc:
-        log.exception("Task scan failed")
-        await update.message.reply_text(f"Axtarış zamanı xəta: {str(exc)[:250]}")
-
-
-async def opportunities(update, context):
-    if not await private_only(update):
-        return
-    with connect() as db:
-        rows = db.execute("SELECT id,title,reward,eligibility,url FROM opportunities WHERE active=1 ORDER BY updated DESC LIMIT 15").fetchall()
-    if not rows:
-        await update.message.reply_text("Hələ elan tapılmayıb. Əvvəl /scan yaz.")
-        return
-    lines = ["İş elanları və mobil tapşırıq platformaları (statusu ayrıca yoxla):"]
-    for row in rows:
-        lines.append(f"\nID {row['id']}: {row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n{row['url']}")
-    lines.append("\nQeyd: elanların mövcudluğu və mükafatın ödənməsi zəmanətli deyil.")
-    await update.message.reply_text("\n".join(lines), disable_web_page_preview=True)
-
-
-async def view(update, context):
-    if not await private_only(update):
-        return
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("İstifadə: /view ID")
-        return
-    with connect() as db:
-        row = db.execute("SELECT * FROM opportunities WHERE id=?", (int(context.args[0]),)).fetchone()
-    if not row:
-        await update.message.reply_text("Elan tapılmadı. /scan ilə yenilə.")
-        return
-    await update.message.reply_text(
-        f"{row['title']}\nÖdəniş: {row['reward']}\nNöv: {row['eligibility']}\n"
-        f"Yenilənib: {row['updated']}\n{row['url']}\n\n"
-        f"Qısa təsvir: {row['summary'] or 'Təsvir yoxdur'}\n\n"
-        "İşə başlamazdan əvvəl qaydaları, AI istifadəsinə icazəni və ödəniş şərtlərini özün təsdiqlə.",
-        disable_web_page_preview=True)
-
-
-
-async def prepare(update, context):
-    if not await private_only(update):
-        return
-    if not context.args or not context.args[0].isdigit():
-        await update.message.reply_text("İstifadə: /prepare ID")
-        return
-    with connect() as db:
-        row = db.execute("SELECT * FROM opportunities WHERE id=?", (int(context.args[0]),)).fetchone()
-    if not row:
-        await update.message.reply_text("Elan tapılmadı. /scan ilə siyahını yenilə.")
-        return
-    title = row["title"]
-    summary = re.sub(r"\s+", " ", row["summary"] or "").strip()
-    if len(summary) > 650:
-        summary = summary[:650] + "…"
-    draft = (
-        "Müraciət mətni — göndərməzdən əvvəl öz təcrübənə uyğun redaktə et:\n\n"
-        "Salam!\n\n"
-        f"“{title}” elanı ilə maraqlanıram. Tapşırığın tələblərini nəzərdən keçirməyə və "
-        "razılaşdırılmış müddətdə keyfiyyətli nəticə təqdim etməyə hazıram.\n\n"
-        "İşə başlamazdan əvvəl gözlənilən nəticəni, qəbul meyarlarını, son tarixi və ödəniş "
-        "qaydalarını dəqiqləşdirmək istərdim. AI alətlərindən istifadə yalnız elan və platforma "
-        "qaydaları buna açıq icazə verərsə mümkün olacaq.\n\n"
-        "Mənim uyğun təcrübəm: [öz real təcrübəni burada yaz].\n"
-        "Təşəkkür edirəm."
-    )
-    await update.message.reply_text(
-        f"📄 Elan #{row['id']} üçün müraciət layihəsi\n"
-        f"Mənbə: {row['source']}\nÖdəniş: {row['reward']}\n"
-        f"Uyğunluq: {row['eligibility']}\n\n"
-        f"Elan xülasəsi: {summary}\n\n{draft}\n\n"
-        f"Orijinal elan: {row['url']}\n\n"
-        "Bu layihə avtomatik göndərilmir. Təcrübə hissəsini yalnız doğru məlumatla doldur və "
-        "müraciəti platformanın özündə özün təsdiqlə.",
-        disable_web_page_preview=True
-    )
-
-
-async def done(update, context):
-    if not await private_only(update):
-        return
-    if len(context.args) < 2 or not context.args[0].isdigit():
-        await update.message.reply_text("İstifadə: /done ID qeyd")
-        return
-    task_id = int(context.args[0])
-    with connect() as db:
-        row = db.execute("SELECT title FROM opportunities WHERE id=?", (task_id,)).fetchone()
-        if not row:
-            await update.message.reply_text("Elan ID-si tapılmadı.")
+    args = context.args
+    if not args or args[0].lower() == "list":
+        with connect() as db:
+            rows = db.execute("SELECT id,email FROM tracker_email_accounts ORDER BY id").fetchall()
+        if not rows:
+            await update.effective_message.reply_text("Hələ e-poçt profili əlavə edilməyib. /email add email@gmail.com")
             return
-        db.execute("INSERT INTO done(task_id,note,created) VALUES(?,?,?)",
-            (task_id, " ".join(context.args[1:]), datetime.now(timezone.utc).isoformat()))
-    await update.message.reply_text("Tamamlandı kimi qeyd edildi. Bu qeyd ödəniş demək deyil; pul gələndə /paid yaz.")
-
-
-async def paid(update, context):
-    if not await private_only(update):
+        await update.effective_message.reply_text(
+            "📧 E-POÇT PROFİLLƏRİ\n" + "\n".join(f"{r['id']}. {r['email']}" for r in rows) +
+            "\n\nYalnız ünvan saxlanılır; parol və giriş kodu istənilmir."
+        )
         return
-    if len(context.args) < 2 or not context.args[0].isdigit():
-        await update.message.reply_text("İstifadə: /paid ID məbləğ qeyd")
-        return
-    try:
-        task_id = int(context.args[0])
-        amount = Decimal(context.args[1].replace(",", "."))
-        cents = int(amount * 100)
-        if amount <= 0 or cents <= 0:
-            raise ValueError()
-    except (ValueError, InvalidOperation):
-        await update.message.reply_text("ID və müsbət məbləği düzgün yaz.")
-        return
-    with connect() as db:
-        row = db.execute("SELECT title FROM opportunities WHERE id=?", (task_id,)).fetchone()
-        if not row:
-            await update.message.reply_text("Elan ID-si tapılmadı.")
+    if args[0].lower() == "add" and len(args) == 2:
+        email = args[1].strip().lower()
+        if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            await update.effective_message.reply_text("E-poçt ünvanı düzgün deyil.")
             return
-        db.execute("INSERT INTO income(task_id,cents,note,created) VALUES(?,?,?,?)",
-            (task_id, cents, " ".join(context.args[2:]), datetime.now(timezone.utc).isoformat()))
-    await update.message.reply_text("İstifadəçinin daxil etdiyi ödəniş qeydə alındı: $" + f"{cents/100:.2f}" + "\\nQeyd: bot bu məbləği platforma və ya blokçeyn vasitəsilə müstəqil təsdiqləməyib.")
-
-
-async def balance(update, context):
-    if not await private_only(update):
-        return
-    with connect() as db:
-        total = db.execute("SELECT COALESCE(SUM(cents),0) FROM income").fetchone()[0]
-        count = db.execute("SELECT COUNT(*) FROM income").fetchone()[0]
-    await update.message.reply_text("İstifadəçi tərəfindən daxil edilmiş ödəniş qeydləri: $" + f"{total/100:.2f}" + f"\nÖdəniş sayı: {count}")
-
-
-async def history(update, context):
-    if not await private_only(update):
-        return
-    with connect() as db:
-        rows = db.execute("SELECT cents,note,task_id FROM income ORDER BY id DESC LIMIT 15").fetchall()
-        done_rows = db.execute("SELECT task_id,note FROM done ORDER BY id DESC LIMIT 10").fetchall()
-    lines = ["Ödənişlər:"] + ["+$" + f"{r['cents']/100:.2f}" + f" — elan {r['task_id']} — {r['note']}" for r in rows]
-    if not rows:
-        lines.append("Hələ ödəniş yoxdur.")
-    lines.append("\nTamamlanan iş qeydləri:")
-    lines += [f"• Elan {r['task_id']} — {r['note']}" for r in done_rows] or ["Hələ qeyd yoxdur."]
-    await update.message.reply_text("\n".join(lines))
-
-
-
-
-
-def magichour_request(method, path, payload=None):
-    """Call Magic Hour API with a server-side key; never expose the key in logs."""
-    api_key = os.getenv("MAGIC_HOUR_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("MAGIC_HOUR_API_KEY Railway dəyişənində yoxdur.")
-    url = "https://api.magichour.ai/v1" + path
-    headers = {"Authorization": "Bearer " + api_key, "Accept": "application/json",
-               "Content-Type": "application/json", "User-Agent": "TaskWorkerAZ/1.0"}
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=45) as response:
-            raw = response.read()
-        return json.loads(raw.decode("utf-8")) if raw else {}
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:400]
-        if exc.code == 402:
-            raise RuntimeError("Pulsuz kredit kifayət etmir və ya funksiya plan tələb edir. Sorğu dayandırıldı.") from None
-        if exc.code == 401:
-            raise RuntimeError("Magic Hour API açarı yanlışdır və ya aktiv deyil.") from None
-        raise RuntimeError("Magic Hour API xətası (%s): %s" % (exc.code, detail)) from None
-
-
-def magichour_free_account_check():
-    """Only allow a free/trial account with credits; reject paid/unknown tiers."""
-    account = magichour_request("GET", "/account")
-    tier = str(account.get("tier", "")).strip().lower()
-    credits = account.get("credits", 0)
-    subscription = account.get("subscription") or {}
-    sub_status = str(subscription.get("status", "")).strip().lower()
-    if tier not in {"free", "trial"}:
-        raise RuntimeError("Pulsuz rejim təhlükəsizliyi üçün yalnız Free/Trial hesabı qəbul edilir. Hesab planı: %s." % (tier or "naməlum"))
-    if sub_status == "active":
-        raise RuntimeError("Aktiv abunə görünür. Ödəniş riskinə görə generasiya bloklandı.")
-    try:
-        credits = float(credits)
-    except (TypeError, ValueError):
-        credits = 0
-    if credits <= 0:
-        raise RuntimeError("Pulsuz kredit balansı 0-dır. Generasiya sorğusu göndərilmədi.")
-    return credits
-
-
-def magichour_wait_for_project(project_type, project_id, timeout=300):
-    paths = {"video": "/video-projects/", "image": "/image-projects/", "audio": "/audio-projects/"}
-    if project_type not in paths:
-        raise RuntimeError("Naməlum media növü.")
-    time_mod = __import__("time")
-    deadline = time_mod.time() + timeout
-    while time_mod.time() < deadline:
-        result = magichour_request("GET", paths[project_type] + urllib.parse.quote(str(project_id)))
-        status = str(result.get("status", "")).lower()
-        if status == "complete":
-            downloads = result.get("downloads") or []
-            if isinstance(downloads, dict):
-                downloads = [downloads]
-            if not downloads and result.get("download"):
-                downloads = [result["download"]]
-            if downloads and isinstance(downloads[0], dict) and downloads[0].get("url"):
-                return downloads[0]["url"]
-            raise RuntimeError("Layihə tamamlandı, amma yükləmə linki yoxdur.")
-        if status in ("error", "canceled"):
-            err = result.get("error") or {}
-            message = err.get("message") if isinstance(err, dict) else str(err)
-            raise RuntimeError("Generasiya %s: %s" % (status, message or "səbəb göstərilməyib"))
-        time_mod.sleep(4)
-    raise TimeoutError("Generasiya hələ tamamlanmayıb. Təkrar sorğu göndərmədim.")
-
-
-def magichour_download(url, filename):
-    req = urllib.request.Request(url, headers={"User-Agent": "TaskWorkerAZ/1.0"})
-    with urllib.request.urlopen(req, timeout=90) as response:
-        content = response.read(49 * 1024 * 1024 + 1)
-    if len(content) > 49 * 1024 * 1024:
-        raise RuntimeError("Fayl Telegram göndərmə limitindən böyükdür.")
-    from io import BytesIO
-    stream = BytesIO(content)
-    stream.name = filename
-    return stream
-
-
-def create_and_send_media_sync(kind, idea):
-    magichour_free_account_check()
-    if kind in ("cartoon", "ad"):
-        style = "family-friendly colorful 3D cartoon animation" if kind == "cartoon" else "polished commercial product advertisement"
-        created = magichour_request("POST", "/text-to-video", {
-            "end_seconds": 5.0,
-            "style": {"prompt": style + ". " + idea + ". Coherent motion, cinematic camera, professional lighting, no subtitles, no watermark."},
-            "aspect_ratio": "16:9", "audio": False, "model": "ltx-2.5",
-            "name": "Task Worker AZ " + ("Cartoon" if kind == "cartoon" else "Advertisement"),
-            "resolution": "480p",
-        })
-        project_type, filename = "video", "task-worker-video.mp4"
-    elif kind == "image":
-        created = magichour_request("POST", "/ai-image-generator", {
-            "image_count": 1, "style": {"prompt": idea, "tool": "general"},
-            "aspect_ratio": "16:9", "model": "z-image-turbo",
-            "name": "Task Worker AZ Image", "resolution": "640px",
-        })
-        project_type, filename = "image", "task-worker-image.png"
-    else:
-        # The documented Magic Hour audio endpoint is speech/TTS, not music composition.
-        lyrics = ("Mövzu: " + idea + ". Yeni arzular, yeni ümidlər, hər gün irəli gedirik. "
-                  "Birlikdə güclüyük, xəyallarımıza çatırıq.")
-        voices = magichour_request("GET", "/voices?limit=20")
-        voice_list = voices.get("voices") or []
-        if not voice_list or not voice_list[0].get("id"):
-            raise RuntimeError("Magic Hour hesabında istifadə edilə bilən səs tapılmadı.")
-        created = magichour_request("POST", "/ai-voice-generator", {
-            "style": {"language": "auto", "prompt": lyrics, "speed": 1.0,
-                      "voice_name": voice_list[0]["id"]},
-            "name": "Task Worker AZ spoken lyrics",
-        })
-        project_type, filename = "audio", "task-worker-lyrics.wav"
-    project_id = created.get("id")
-    if not project_id:
-        raise RuntimeError("Magic Hour layihə ID-si qaytarmadı.")
-    url = magichour_wait_for_project(project_type, project_id)
-    return magichour_download(url, filename), project_type
-
-
-async def create_and_send_media(update, kind, idea):
-    await update.message.reply_text("⏳ Magic Hour pulsuz hesabını və kredit balansını yoxlayıram...")
-    stream, media_kind = await asyncio.to_thread(create_and_send_media_sync, kind, idea)
-    if media_kind == "image":
-        await update.message.reply_photo(photo=stream, caption="🖼️ Hazır AI şəkli")
-    elif media_kind == "video":
-        await update.message.reply_video(video=stream, caption="🎬 Hazır AI videosu", supports_streaming=True)
-    else:
-        await update.message.reply_audio(audio=stream, caption="🔊 AI səsləndirməsi (musiqili mahnı deyil)", title="Task Worker AZ")
-
-
-async def creative_request(update, context, kind):
-    if not await private_only(update):
-        return
-    idea = " ".join(context.args).strip()
-    if not idea:
-        examples = {
-            "cartoon": "/cartoon Ayda yaşayan balaca oğlan",
-            "ad": "/ad evdə hazırlanan tort",
-            "song": "/song dostluq və uşaqlıq",
-            "image": "/image sehrli meşədə balaca tülkü"
-        }
-        await update.message.reply_text("Mövzunu da yaz. Nümunə: " + examples[kind])
-        return
-    idea = idea[:700]
-    if os.getenv("MAGIC_HOUR_API_KEY", "").strip():
         try:
-            await create_and_send_media(update, kind, idea)
-        except Exception as exc:
-            log.exception("Magic Hour media generation failed")
-            await update.message.reply_text(
-                "⚠️ Media yaratmaq alınmadı: " + str(exc)[:350] +
-                "\nMagic Hour API açarını və pulsuz kredit balansını yoxla. Heç bir ödəniş edilmədi."
+            with connect() as db:
+                cur = db.execute("INSERT INTO tracker_email_accounts(email,created) VALUES(?,?)", (email, now_local()))
+                account_id = cur.lastrowid
+            await update.effective_message.reply_text(f"Əlavə edildi: profil #{account_id} — {email}")
+        except sqlite3.IntegrityError:
+            await update.effective_message.reply_text("Bu e-poçt artıq siyahıdadır.")
+        return
+    await update.effective_message.reply_text("İstifadə: /email add email@gmail.com və ya /email list")
+
+async def record(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    args = context.args
+    if len(args) < 3:
+        await update.effective_message.reply_text(
+            "İstifadə: /record gold|arctic|lumber|task EMAIL_ID|- SATOSHI [REKLAM_SAYI] [QEYD]"
+        )
+        return
+    app_key = args[0].lower()
+    if app_key not in APPS:
+        await update.effective_message.reply_text("Mənbə gold, arctic, lumber və ya task olmalıdır.")
+        return
+    try:
+        account_id = None if args[1] == "-" else int(args[1])
+        satoshis = int(args[2])
+        ads_count = int(args[3]) if len(args) >= 4 else 0
+        if satoshis < 0 or ads_count < 0:
+            raise ValueError
+    except ValueError:
+        await update.effective_message.reply_text("Satoshi, reklam sayı və profil ID-si tam müsbət ədədlər olmalıdır.")
+        return
+    if app_key != "task" and account_id is None:
+        await update.effective_message.reply_text("Bu tətbiq üçün e-poçt profil ID-si lazımdır. Əvvəl /email list yaz.")
+        return
+    note = " ".join(args[4:]) if len(args) >= 5 else ""
+    with connect() as db:
+        if account_id is not None:
+            exists = db.execute("SELECT 1 FROM tracker_email_accounts WHERE id=?", (account_id,)).fetchone()
+            if not exists:
+                await update.effective_message.reply_text("Profil tapılmadı. /email list yaz.")
+                return
+        cur = db.execute(
+            "INSERT INTO tracker_earnings(app_key,account_id,satoshis,ads_count,note,created) VALUES(?,?,?,?,?,?)",
+            (app_key, account_id, satoshis, ads_count, note, now_local())
+        )
+    await update.effective_message.reply_text(
+        f"✅ Qeyd edildi: #{cur.lastrowid}\n{APPS[app_key][0]}\n"
+        f"Qazanc: {satoshis:,} satoshi\nReklam: {ads_count}\n"
+        "Qeyd: bu, sənin daxil etdiyin qeyddir; tətbiq balansı ayrıca yoxlanmalıdır."
+    )
+
+async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    with connect() as db:
+        total = db.execute("SELECT COALESCE(SUM(satoshis),0) FROM tracker_earnings").fetchone()[0]
+        withdrawn = db.execute("SELECT COALESCE(SUM(satoshis),0) FROM tracker_withdrawals").fetchone()[0]
+        rows = db.execute(
+            "SELECT app_key,COALESCE(SUM(satoshis),0) AS sats,COALESCE(SUM(ads_count),0) AS ads "
+            "FROM tracker_earnings GROUP BY app_key ORDER BY app_key"
+        ).fetchall()
+    lines = ["💰 BALANS", f"Qeydə alınmış qazanc: {total:,} satoshi", f"Qeydə alınmış çıxarış: {withdrawn:,} satoshi",
+             f"Qalan qeydiyyat balansı: {max(total-withdrawn,0):,} satoshi", ""]
+    for r in rows:
+        lines.append(f"• {APPS[r['app_key']][0]}: {r['sats']:,} satoshi | {r['ads']} reklam")
+    lines.append("\nBu balans yalnız əl ilə daxil edilmiş qeydlərin cəmidir; blokçeyn balansı deyil.")
+    await update.effective_message.reply_text("\n".join(lines))
+
+async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    day = datetime.now(timezone(timedelta(hours=4))).date().isoformat()
+    with connect() as db:
+        rows = db.execute(
+            "SELECT app_key,SUM(satoshis) AS sats,SUM(ads_count) AS ads,COUNT(*) AS entries "
+            "FROM tracker_earnings WHERE substr(created,1,10)=? GROUP BY app_key ORDER BY app_key", (day,)
+        ).fetchall()
+    if not rows:
+        await update.effective_message.reply_text("Bu gün hələ qazanc qeydi yoxdur.")
+        return
+    lines = ["📅 BUGÜNKÜ QEYDLƏR"]
+    for r in rows:
+        lines.append(f"• {APPS[r['app_key']][0]}: {r['sats']:,} satoshi, {r['ads']} reklam, {r['entries']} qeyd")
+    await update.effective_message.reply_text("\n".join(lines))
+
+async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    args = context.args
+    if args and args[0].lower() == "set" and len(args) == 2:
+        address = args[1].strip()
+        if not BTC_ADDRESS_RE.fullmatch(address):
+            await update.effective_message.reply_text("BTC ünvanı formatı tanınmadı. Ünvanı yoxla; şəxsi açar və seed phrase göndərmə.")
+            return
+        with connect() as db:
+            db.execute(
+                "INSERT INTO tracker_wallet(id,address,updated) VALUES(1,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET address=excluded.address,updated=excluded.updated",
+                (address, now_local())
             )
+        await update.effective_message.reply_text("✅ Ümumi Bitcoin qəbul ünvanı saxlanıldı. Bot bu ünvana avtomatik köçürmə etmir.")
         return
-
-    if kind == "cartoon":
-        fallback = ("🎬 CİZGİ FİLMİ SSENARİSİ\nMövzu: " + idea +
-                    "\n1. Giriş: qəhrəman sirli hadisə ilə qarşılaşır.\n2. Macəra: yeni dost tapır və maneəni aşır.\n3. Həll: ağıllı qərarla problemi həll edir.\n4. Final: dostluq və cəsarət mesajı.")
-    elif kind == "ad":
-        fallback = ("📢 REKLAM SSENARİSİ\nMəhsul: " + idea +
-                    "\n0–3 san: diqqətçəkən giriş.\n3–8 san: məhsulu göstər.\n8–15 san: üstünlükləri dürüst təqdim et.\n15–20 san: əlaqə/alış çağırışı.")
-    elif kind == "song":
-        fallback = ("🎵 MAHNI MƏTNİ\nMövzu: " + idea +
-                    "\n[Verse] Yeni səhər, yeni ümid,\nArzularım mənimlədir.\n[Chorus] Gəl, birlikdə oxuyaq,\nSevincimizi paylaşaq!")
-    else:
-        fallback = ("🖼️ ŞƏKİL PROMPTU\nCreate a beautiful, high-quality illustration of " + idea +
-                    ", vivid colors, detailed composition, cinematic soft lighting, family-friendly, no text, no watermark.")
-    await update.message.reply_text(
-        fallback + "\n\n⚠️ Bu hələ mətn nəticəsidir. Hazır MP4/PNG və səsləndirmə faylı üçün Railway-də MAGIC_HOUR_API_KEY əlavə edilməlidir."
+    with connect() as db:
+        row = db.execute("SELECT address FROM tracker_wallet WHERE id=1").fetchone()
+    await update.effective_message.reply_text(
+        "Ümumi BTC ünvanı: " + (row["address"] if row else "hələ əlavə edilməyib") +
+        "\nBot yalnız ünvanı saxlayır; pul göndərmir və private key saxlamır."
     )
 
-
-async def cartoon(update, context):
-    await creative_request(update, context, "cartoon")
-
-
-async def ad_creator(update, context):
-    await creative_request(update, context, "ad")
-
-
-async def song_creator(update, context):
-    await creative_request(update, context, "song")
-
-
-async def image_creator(update, context):
-    await creative_request(update, context, "image")
-
-
-async def studio(update, context):
-    if not await private_only(update):
+async def withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
         return
-    await update.message.reply_text(
-        "🎨 TASK WORKER AZ — YARADICI STUDİO\n"
-        "/cartoon mövzu — 5 saniyəlik cizgi video\n"
-        "/ad məhsul — 5 saniyəlik reklam videosu\n"
-        "/song mövzu — mövzu üzrə səsli mətn (musiqili mahnı deyil)\n"
-        "/image mövzu — PNG şəkil\n\n"
-        "Magic Hour API üçün Railway-də MAGIC_HOUR_API_KEY dəyişənini əlavə et. "
-        "Bot yalnız Free/Trial hesabı və müsbət pulsuz kredit balansını qəbul edir; ödənişli və naməlum planları bloklayır. "
-        "Kredit 0 olduqda yeni generasiya sorğusu göndərilmir. API-də musiqi bəstələmə endpoint-i təsdiqlənmədiyi üçün /song yalnız səsli mətn yaradır. "
-        "API açarını GitHub-a və ya bu söhbətə göndərmə."
-    )
+    if len(context.args) != 2:
+        await update.effective_message.reply_text("İstifadə: /withdraw SATOSHI TXID — yalnız artıq edilmiş çıxarışı qeyd etmək üçündür.")
+        return
+    try:
+        sats = int(context.args[0])
+        txid = context.args[1].strip()
+        if sats <= 0 or len(txid) < 20 or len(txid) > 150:
+            raise ValueError
+    except ValueError:
+        await update.effective_message.reply_text("Məbləğ müsbət satoshi, TXID isə real əməliyyat hash-i olmalıdır.")
+        return
+    with connect() as db:
+        db.execute("INSERT INTO tracker_withdrawals(satoshis,txid,created) VALUES(?,?,?)", (sats, txid, now_local()))
+    await update.effective_message.reply_text(f"Çıxarış qeydə alındı: {sats:,} satoshi. TXID: {txid}")
 
-
+async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await allowed(update):
+        return
+    with connect() as db:
+        earnings = db.execute(
+            "SELECT e.id,e.app_key,e.satoshis,e.ads_count,e.note,e.created,a.email "
+            "FROM tracker_earnings e LEFT JOIN tracker_email_accounts a ON a.id=e.account_id "
+            "ORDER BY e.id DESC LIMIT 12"
+        ).fetchall()
+        withdrawals = db.execute("SELECT satoshis,txid,created FROM tracker_withdrawals ORDER BY id DESC LIMIT 5").fetchall()
+    lines = ["🧾 SON QAZANC QEYDLƏRİ"]
+    for r in earnings:
+        lines.append(f"#{r['id']} {APPS[r['app_key']][0]}: +{r['satoshis']:,} sat | {r['ads_count']} reklam | {r['email'] or 'profil yoxdur'} | {r['created']}")
+    if not earnings:
+        lines.append("Hələ qazanc qeydi yoxdur.")
+    lines.append("\nÇIXARIŞLAR")
+    for r in withdrawals:
+        lines.append(f"-{r['satoshis']:,} sat | {r['txid']} | {r['created']}")
+    if not withdrawals:
+        lines.append("Hələ çıxarış qeydi yoxdur.")
+    await update.effective_message.reply_text("\n".join(lines))
 
 def main():
     if not TOKEN:
-        raise RuntimeError("TELEGRAM_BOT_TOKEN təyin edilməyib")
-    app = Application.builder().token(TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
-    for name, handler in [
-        ("start", start), ("id", myid), ("real", real_mode), ("demo", demo_mode), ("status", status),
-        ("tasks", tasks), ("azjobs", azjobs), ("mobile", mobile), ("earn", earn), ("scan", scan),
-        ("opportunities", opportunities), ("faucet", faucet), ("view", view), ("prepare", prepare), ("done", done),
-        ("paid", paid), ("balance", balance), ("history", history),
-        ("studio", studio), ("cartoon", cartoon), ("ad", ad_creator), ("song", song_creator), ("image", image_creator)
+        raise RuntimeError("BOT_TOKEN və ya TELEGRAM_BOT_TOKEN Railway-də təyin edilməyib.")
+    init_db()
+    app = Application.builder().token(TOKEN).build()
+    for command, handler in [
+        ("start", start), ("help", help_cmd), ("apps", apps), ("email", email_cmd),
+        ("record", record), ("balance", balance), ("today", today), ("wallet", wallet),
+        ("withdraw", withdraw), ("history", history),
     ]:
-        app.add_handler(CommandHandler(name, handler))
-    app.add_handler(CallbackQueryHandler(mode_callback, pattern=r"^task_mode_"))
-    log.info("Task Worker AZ started")
+        app.add_handler(CommandHandler(command, handler))
+    log.info("Task Worker AZ earnings tracker started")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
