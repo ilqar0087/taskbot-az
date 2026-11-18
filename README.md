@@ -20,8 +20,10 @@ Telegram botu Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşır�
 - `/record task - 500 0 tapşırıq` — Task Worker AZ qazanc qeydi
 - `/balance` — qeyd edilmiş qazanc və çıxarış cəmi
 - `/today` — bugünkü qeydlər
-- `/wallet set BTC_ADDRESS` — tək BTC qəbul ünvanı
-- `/wallet` — ünvanı göstər
+- `/wallet set BTC_ADDRESS` — Bitcoin on-chain qəbul ünvanı
+- `/wallet` — Bitcoin ünvanını göstər
+- `/lightning set name@walletofsatoshi.com` — Wallet of Satoshi Lightning ünvanını saxla
+- `/lightning` — Lightning ünvanını göstər
 - `/withdraw SATOSHI TXID` — artıq edilmiş çıxarışı qeyd et
 - `/history` — tarixçə
 
@@ -35,6 +37,6 @@ Telegram botu Gold Diggers, Arctic Rush, Lumberjack və Task Worker AZ tapşır�
 - Çoxsaylı hesablar yalnız tətbiqin qaydaları buna açıq icazə verirsə istifadə edilməlidir.
 - E-poçt ünvanları yalnız profil etiketi kimi saxlanılır. Gmail parolu, OTP, seed phrase və private key istənilmir və saxlanılmır.
 - Tətbiq statusları yalnız istifadəçinin əl ilə daxil etdiyi uçot qeydləridir; hesab yaratma və tətbiqə giriş avtomatlaşdırılmır.
-- Bot BTC köçürməsi etmir. Yalnız bir ümumi qəbul ünvanını saxlayır və istifadəçinin artıq etdiyi çıxarışı TXID ilə qeyd edir.
+- Bot BTC köçürməsi etmir. Bitcoin on-chain və Lightning ünvanlarını ayrı saxlayır; istifadəçinin artıq etdiyi çıxarışı TXID ilə qeyd edir.
 - Balans yalnız istifadəçinin daxil etdiyi qeydlərin cəmidir; real tətbiq və blokçeyn balansı deyil.
 - Mövcud SQLite faylı və köhnə cədvəllər silinmir; yeni izləyici cədvəlləri ayrıca yaradılır.
