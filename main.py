@@ -324,16 +324,17 @@ async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await allowed(update):
         return
-    day = datetime.now(timezone(timedelta(hours=4))).date().isoformat()
     with connect() as db:
         profile_count = db.execute("SELECT COUNT(*) FROM tracker_email_accounts").fetchone()[0]
         rows = db.execute(
             "SELECT app_key,SUM(satoshis) AS sats,SUM(ads_count) AS ads,COUNT(*) AS entries "
-            "FROM tracker_earnings WHERE substr(created,1,10)=? GROUP BY app_key ORDER BY app_key", (day,)
+            "FROM tracker_earnings WHERE datetime(created) >= datetime('now','-24 hours') "
+            "GROUP BY app_key ORDER BY app_key"
         ).fetchall()
     by_app = {r["app_key"]: r for r in rows}
     lines = [
-        "📅 BUGÜNKÜ QEYDLƏR",
+        "📅 SON 24 SAATIN HESABATI",
+        "Hesabat dövrü: hərəkətli 24 saat; növbəti 24 saatda hesabat avtomatik yenilənir.",
         f"Profil sayı: {profile_count}",
         f"Ümumi reklam hədəfi (64 Gmail): {DAILY_AD_TARGET_PER_PROFILE * PROFILE_SERIES_COUNT:,}",
     ]
@@ -352,9 +353,9 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if task:
         lines.append(f"• Task Worker AZ: {int(task['sats'] or 0):,} sat | {int(task['entries'] or 0)} qeyd")
         total_sats += int(task["sats"] or 0)
-    lines.append(f"\nCəmi reklam: {total_ads:,}/4 736")
+    lines.append(f"\nSon 24 saatda reklam: {total_ads:,}/4 736")
     lines.append(f"Cəmi qeyd edilmiş qazanc: {total_sats:,} satoshi")
-    lines.append("Bu göstəricilər əl ilə daxil edilən qeydlərdir; tətbiqlərdən avtomatik oxunmur.")
+    lines.append("24 saatlıq hesabat hərəkətli pəncərədir; köhnə qeydlər tarixçədə qalır. Göstəricilər əl ilə daxil edilir, tətbiqlərdən avtomatik oxunmur.")
     await update.effective_message.reply_text("\n".join(lines))
 
 async def wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
